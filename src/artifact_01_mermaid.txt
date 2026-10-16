@@ -1,0 +1,40 @@
+flowchart TD
+    subgraph OnChain["Solana Blockchain (Anchor Framework)"]
+        TreasuryConfig["Treasury Config PDA<br/>[seeds: 'config', sponsor_pk]"]
+        GrantVault["Grantee Escrow Vault PDA<br/>[seeds: 'grant', config_pk, grantee_pk]"]
+        MilestoneState["Milestone Registry PDA<br/>[Status: Pending | Submitted | Approved | Released]"]
+        ClawbackLock["Time-Lock Refund Engine<br/>[Epoch & Clock Validation]"]
+    end
+
+    subgraph OffChain["Off-Chain Automation Daemon & Engine"]
+        Daemon["Rumbo Automation Service<br/>(Node.js / TypeScript Agent)"]
+        HeliusRPC["Helius / Quicknode RPC<br/>(WebSocket Event Stream)"]
+        Relayer["Agent Keypair / Relayer"]
+    end
+
+    subgraph EnterpriseServices["Enterprise Integration Layer"]
+        ResendAPI["Resend API<br/>(Email Delivery & Travel Vouchers)"]
+        DiscordHook["Discord Operations Webhook<br/>(Treasury & Milestone Alerts)"]
+        GitHubAPI["GitHub / Solana Attestation<br/>(Commit & Deliverable Check)"]
+    end
+
+    subgraph Users["Actors"]
+        Sponsor["Sponsor / Foundation Admin"]
+        Grantee["Builder / Grant Recipient"]
+    end
+
+    %% Interactions
+    Sponsor -->|"1. Initialize & Fund Escrow (USDC/SOL)"| TreasuryConfig
+    TreasuryConfig -->|"2. Provision Grant Allocation"| GrantVault
+    Grantee -->|"3. Submit Milestone Proof (IPFS CID / TX Hash)"| MilestoneState
+    HeliusRPC -->|"4. Stream Program Logs (On-Chain Events)"| Daemon
+    Daemon -->|"5. Fetch Commit / Receipt"| GitHubAPI
+    Sponsor -->|"6. Approve Milestone"| MilestoneState
+    MilestoneState -->|"7. Release Funds to Grantee ATA"| Grantee
+    MilestoneState -.->|"Timeout / No-Show"| ClawbackLock
+    ClawbackLock -->|"Refund Unused Capital"| Sponsor
+
+    %% Off-chain notifications
+    Daemon -->|"8. Trigger Dynamic Ticket Voucher Email"| ResendAPI
+    Daemon -->|"9. Emit Treasury & Security Telemetry"| DiscordHook
+    ResendAPI -->|"Direct Inbox Delivery"| Grantee

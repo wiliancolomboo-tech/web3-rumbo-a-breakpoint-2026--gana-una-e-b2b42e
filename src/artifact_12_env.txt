@@ -1,7 +1,4 @@
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=RumbogK9g3fL5eH7Z9sPq3h2R2kZ9sPq3h2R2kZ9sPq
-RESEND_API_KEY=re_123456789_abcdefghijklmnopqrstuvwx
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1234567890/token
-SLACK_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
-DEFAULT_NOTIFICATION_RECIPIENT=builder@solana.org
-PORT=8080
+RESEND_API_KEY=re_live_938102948192471928471
+DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
+TEST_EMAIL=builder@solana.org

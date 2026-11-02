@@ -1,5 +1,5 @@
 SOLANA_RPC_URL=https://api.devnet.solana.com
 PROGRAM_ID=RumbokZg3bB6o4kK1gBwK95Vb2e6T8kF6Z9Wc4jB9Rum
 RESEND_API_KEY=re_your_live_resend_api_key_here
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your/webhook/url
+DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 SCHOLAR_NOTIFICATION_EMAIL=scholar@solana.org

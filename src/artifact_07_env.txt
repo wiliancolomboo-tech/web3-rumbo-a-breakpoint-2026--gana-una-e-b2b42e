@@ -3,5 +3,5 @@ SOLANA_RPC_URL=https://api.devnet.solana.com
 PROGRAM_ID=RumboxQeAEvkYn2W8XW4vE8eYm4Q2zWvL8JdK7dM4ump
 AUTHORITY_KEYPAIR_PATH=/app/credentials/deployer-keypair.json
 RESEND_API_KEY=re_live_enterpriseproductionkeyhere
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your/webhook/url
+DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 SENDER_EMAIL=grants@breakpoint2026.solana.com

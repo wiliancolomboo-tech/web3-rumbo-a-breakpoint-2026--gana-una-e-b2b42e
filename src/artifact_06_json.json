@@ -1,23 +1,13 @@
 {
-  "name": "solpath-automation-service",
-  "version": "1.0.0",
-  "description": "Event-driven enterprise worker for SolPath 2026",
-  "main": "dist/worker.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/worker.js"
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist"
   },
-  "dependencies": {
-    "@coral-xyz/anchor": "^0.30.1",
-    "@solana/web3.js": "^1.95.3",
-    "@solana/spl-token": "^0.4.8",
-    "dotenv": "^16.4.5",
-    "node-fetch": "^2.7.0",
-    "resend": "^3.2.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.24",
-    "@types/node-fetch": "^2.6.11",
-    "typescript": "^5.3.3"
-  }
+  "include": ["src/**/*"]
 }

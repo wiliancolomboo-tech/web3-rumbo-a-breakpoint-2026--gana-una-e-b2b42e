@@ -5,5 +5,5 @@ ANCHOR_WALLET=./id.json
 
 # Enterprise Integrations
 RESEND_API_KEY=re_9a8b7c6d5e4f3a2b1c0d_sample
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1234567890/abcdefghijklmnopqrstuvwxyz
+DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 TEST_NOTIFICATION_EMAIL=fellowships@solanaspain.org

@@ -5,4 +5,4 @@ ORACLE_KEYPAIR_PATH=./oracle-keypair.json
 
 # Enterprise Notification APIs
 RESEND_API_KEY=re_123456789abcdefABCDEF
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/token_secret_here
+DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder

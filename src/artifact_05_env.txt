@@ -7,7 +7,7 @@ IDL_PATH="./target/idl/rumbo_protocol.json"
 # Enterprise Communication Rails
 RESEND_API_KEY="re_123456789_enterpriseKey"
 OPERATIONAL_EMAIL="tickets@breakpoint.solana.com"
-DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/123456789/YourSecretWebhookToken"
+DISCORD_WEBHOOK_URL="https://api.example.com/webhooks/alerts/placeholder"
 
 # Telemetry
 PORT=8080

@@ -1,4 +1,4 @@
-# Execute clawback through CLI after expiry epoch or via committee multisig
-npm run cli -- cancel-or-clawback \
-  --keypair ~/.config/solana/sponsor-keypair.json \
-  --id 202601
+cp .env.example .env
+# Edit .env with real Resend API key and RPC URL
+docker-compose up -d --build
+docker-compose logs -f

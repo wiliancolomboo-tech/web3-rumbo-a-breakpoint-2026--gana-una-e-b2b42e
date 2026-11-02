@@ -1,25 +1,24 @@
 flowchart TD
-    subgraph "Applicant & Evaluator Tier"
-        A[Builder / Grant Applicant] -->|1. Submit Proposal & Register PDA| P[Solana Anchor Program]
-        E[Foundation Reviewer / DAO] -->|2. Approve & Deposit USDC Grant| P
+    subgraph Builder_Experience [Builder Journey]
+        A[Applicant / Builder] -->|1. Submit Profile & Project Hash| B[Rumbo CLI / Web Portal]
+        B -->|2. apply_for_grant ix| C[Solana Program: rumbo_breakpoint]
     end
 
-    subgraph "Solana Runtime (On-Chain Engine)"
-        P -->|Derive PDA| G[Grant PDA: State, Milestones, Builder Pubkey]
-        P -->|Token CPI| V[Escrow Token Vault: SPL USDC]
-        G -.->|Milestone Met Condition| P
-        P -->|Disburse Milestone Share| A
-        P -->|Issue SBT Credential| A
+    subgraph OnChain_State [Solana Anchor Core Engine]
+        C -->|Initialize Application PDA| D[(Application State PDA)]
+        E[Grant Committee / Judges] -->|3. attest_contribution ix| C
+        C -->|Transition State to Approved| D
+        C -->|4. disburse_travel_stipend ix| F[(Treasury Vault PDA)]
+        F -->|Release SOL/USDC| A
+        C -->|5. claim_breakpoint_ticket ix| G[(Soulbound Ticket PDA)]
+        C -->|Emit Event: StipendDisbursed & TicketIssued| H[Solana Gossip / RPC Logs]
     end
 
-    subgraph "RumboOS Automation Engine (Off-Chain Oracle & Worker)"
-        P -.->|Emit Solana Event: MilestoneSubmitted| W[RumboOS Worker Daemon]
-        GH[GitHub API / Solana RPC Indexer] -->|Verify Commit/Deployment Proof| W
-        W -->|Signed Proof Instruction: verify_and_release| P
-    end
-
-    subgraph "Enterprise Notification & Logistics Fabric"
-        W -->|Batch Transmit Dispatch Status| D[Discord Webhook / Slack Alerts]
-        W -->|Send Flight/Hotel Stipend Receipt| R[Resend Enterprise Email API]
-        R -->|Notification & Breakpoint Voucher| A
+    subgraph OffChain_Automation [Enterprise Relayer Service]
+        H -->|WebSocket Log Subscription| I[Rumbo Automation Worker]
+        I -->|Parse Event Payload| J{Event Type}
+        J -->|TicketClaimed| K[Resend Transactional Email Engine]
+        J -->|GrantApproved| L[Discord Community Webhook]
+        K -->|Deliver Boarding Pass & QR Badge| A
+        L -->|Broadcast Merit Leaderboard| M[Solana Community Feed]
     end

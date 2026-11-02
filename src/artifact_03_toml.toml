@@ -1,12 +1,12 @@
 [package]
-name = "rumbo_protocol"
+name = "rumbo_breakpoint"
 version = "0.1.0"
-description = "Solana Breakpoint Travel Grant & Soulbound Ticket Protocol"
+description = "Verifiable Travel Grant and Breakpoint Ticket Engine"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "rumbo_protocol"
+name = "rumbo_breakpoint"
 
 [features]
 no-entrypoint = []
@@ -17,4 +17,4 @@ default = []
 
 [dependencies]
 anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
-anchor-spl = { version = "0.30.1" }
+anchor-spl = "0.30.1"

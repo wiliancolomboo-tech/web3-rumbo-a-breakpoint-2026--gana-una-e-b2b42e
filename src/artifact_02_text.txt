@@ -1,4 +1,4 @@
-programs/rumbo_engine/
+programs/rumbo_breakpoint/
 ├── Cargo.toml
 └── src/
     └── lib.rs

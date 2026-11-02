@@ -9,7 +9,7 @@ cat <<EOF > .env
 SOLANA_RPC_URL=https://api.devnet.solana.com
 PROGRAM_ID=Rumb026Breakpoint11111111111111111111111111
 RESEND_API_KEY=re_your_api_key_here
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your/webhook/url
+DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 ORACLE_SECRET_KEY=[1,2,3...255]
 EOF
 

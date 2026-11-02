@@ -1,15 +1,29 @@
-import http from "http";
+import { Command } from "commander";
+import * as anchor from "@coral-xyz/anchor";
+import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { RumboNotificationDispatcher } from "./relayer";
+import * as crypto from "crypto";
 
-const server = http.createServer((req, res) => {
-  if (req.url === "/health" && req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "healthy", timestamp: Date.now() }));
-  } else {
-    res.writeHead(404);
-    res.end();
+const programId = new PublicKey("RumbokZ3JcQWjC1E4uV4bZzK9f4w4hE2n8z1yX7pL5q");
+
+async function main() {
+  console.log("=== RUMBO A BREAKPOINT 2026: AUTOMATION CLI ===");
+  const connection = new anchor.web3.Connection(
+    process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
+    "confirmed"
+  );
+
+  console.log(`Connected to Solana cluster. Program ID: ${programId.toBase58()}`);
+
+  // Test Resend integration directly
+  if (process.env.TEST_EMAIL) {
+    console.log(`Executing test notification to: ${process.env.TEST_EMAIL}`);
+    await RumboNotificationDispatcher.sendGranteePassEmail(process.env.TEST_EMAIL, {
+      applicant: "73kY...w4hE",
+      github: "solana-builder",
+      approvedStipendLamports: 2.5 * LAMPORTS_PER_SOL,
+    });
   }
-});
+}
 
-server.listen(8080, () => {
-  console.log("[Healthcheck Daemon] Serving on :8080/health");
-});
+main().catch(console.error);

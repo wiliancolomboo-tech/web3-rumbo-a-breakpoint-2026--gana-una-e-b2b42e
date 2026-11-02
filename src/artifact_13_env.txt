@@ -4,5 +4,5 @@ MIN_SCORE=70
 SOLANA_RPC_URL=https://api.devnet.solana.com
 RESEND_API_KEY=re_xxxxxxxxx
 EMAIL_FROM=RumboProof <noreply@example.com>
-NOTIFICATION_WEBHOOK_URL=https://discord.com/api/webhooks/...
+NOTIFICATION_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 DATABASE_URL=postgresql://rumbo:rumbo@postgres:5432/rumbo

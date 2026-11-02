@@ -1,293 +1,215 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
 
-declare_id!("RumbogK9aM8aXG9HNx5mZ3KkH9u4kR3A1b8ZpS7v2vE");
+declare_id!("RumbokZ3JcQWjC1E4uV4bZzK9f4w4hE2n8z1yX7pL5q");
 
+pub const DISCRIMINATOR_LENGTH: usize = 8;
 pub const MAX_NAME_LEN: usize = 64;
-pub const MAX_EMAIL_LEN: usize = 128;
-pub const MAX_MILESTONES: usize = 3;
+pub const MAX_METADATA_LEN: usize = 128;
+pub const COMMITTEE_ROLE: u8 = 1;
 
 #[program]
-pub mod rumbo_protocol {
+pub mod rumbo_breakpoint {
     use super::*;
 
-    /// Initializes a new travel grant pool for Breakpoint 2026.
-    pub fn initialize_grant_pool(
-        ctx: Context<InitializeGrantPool>,
-        pool_name: String,
-        total_stipend_per_builder: u64,
-        max_builders: u32,
-        claim_deadline: i64,
+    /// Initialize the Breakpoint Campaign Season
+    pub fn initialize_campaign(
+        ctx: Context<InitializeCampaign>,
+        season_id: u32,
+        max_tickets: u32,
+        total_stipend_cap_lamports: u64,
+        min_score_threshold: u8,
     ) -> Result<()> {
-        require!(
-            pool_name.as_bytes().len() <= MAX_NAME_LEN,
-            RumboError::StringExceedsLimit
-        );
-        require!(
-            total_stipend_per_builder > 0,
-            RumboError::InvalidStipendAmount
-        );
-        require!(
-            claim_deadline > Clock::get()?.unix_timestamp,
-            RumboError::InvalidDeadline
-        );
+        let campaign = &mut ctx.accounts.campaign;
+        campaign.admin = ctx.accounts.admin.key();
+        campaign.season_id = season_id;
+        campaign.max_tickets = max_tickets;
+        campaign.tickets_awarded = 0;
+        campaign.total_stipend_cap = total_stipend_cap_lamports;
+        campaign.total_stipend_disbursed = 0;
+        campaign.min_score_threshold = min_score_threshold;
+        campaign.bump = ctx.bumps.campaign;
+        campaign.vault_bump = ctx.bumps.vault;
 
-        let pool = &mut ctx.accounts.grant_pool;
-        pool.authority = ctx.accounts.authority.key();
-        pool.pool_name = pool_name;
-        pool.total_stipend_per_builder = total_stipend_per_builder;
-        pool.max_builders = max_builders;
-        pool.registered_builders = 0;
-        pool.disbursed_funds = 0;
-        pool.claim_deadline = claim_deadline;
-        pool.bump = ctx.bumps.grant_pool;
-        pool.vault_bump = ctx.bumps.vault;
-
-        emit!(GrantPoolInitializedEvent {
-            pool: pool.key(),
-            authority: pool.authority,
-            total_stipend_per_builder,
-            max_builders,
-            claim_deadline,
+        emit!(CampaignInitializedEvent {
+            season_id,
+            admin: ctx.accounts.admin.key(),
+            total_stipend_cap: total_stipend_cap_lamports,
+            max_tickets,
         });
 
         Ok(())
     }
 
-    /// Builder applies for a Breakpoint travel grant.
+    /// Builder applies for a travel stipend and Breakpoint 2026 Ticket
     pub fn apply_for_grant(
         ctx: Context<ApplyForGrant>,
-        builder_name: String,
-        contact_email: String,
+        legal_name: String,
+        github_handle: String,
+        project_commit_hash: [u8; 32],
+        requested_stipend_lamports: u64,
     ) -> Result<()> {
         require!(
-            builder_name.as_bytes().len() <= MAX_NAME_LEN,
-            RumboError::StringExceedsLimit
+            legal_name.as_bytes().len() <= MAX_NAME_LEN,
+            RumboError::NameTooLong
         );
         require!(
-            contact_email.as_bytes().len() <= MAX_EMAIL_LEN,
-            RumboError::StringExceedsLimit
-        );
-
-        let pool = &mut ctx.accounts.grant_pool;
-        require!(
-            pool.registered_builders < pool.max_builders,
-            RumboError::PoolCapacityReached
+            github_handle.as_bytes().len() <= MAX_NAME_LEN,
+            RumboError::HandleTooLong
         );
         require!(
-            Clock::get()?.unix_timestamp < pool.claim_deadline,
-            RumboError::DeadlineExceeded
+            requested_stipend_lamports > 0,
+            RumboError::InvalidRequestedAmount
         );
 
         let application = &mut ctx.accounts.application;
-        application.pool = pool.key();
-        application.builder = ctx.accounts.builder.key();
-        application.builder_name = builder_name.clone();
-        application.contact_email = contact_email.clone();
+        application.applicant = ctx.accounts.applicant.key();
+        application.campaign = ctx.accounts.campaign.key();
+        application.legal_name = legal_name.clone();
+        application.github_handle = github_handle.clone();
+        application.project_commit_hash = project_commit_hash;
+        application.requested_stipend = requested_stipend_lamports;
+        application.approved_stipend = 0;
+        application.score = 0;
         application.status = ApplicationStatus::Submitted;
-        application.milestone_progress = 0;
-        application.funds_claimed = 0;
-        application.ticket_issued = false;
+        application.ticket_claimed = false;
         application.bump = ctx.bumps.application;
 
-        // Initialize 3 default Breakpoint milestones:
-        // 0: Flight/Visa verification (30%)
-        // 1: Technical Build Submission (40%)
-        // 2: Event Check-in & Demo (30%)
-        application.milestones = [
-            Milestone {
-                weight_bps: 3000,
-                approved: false,
-                paid: false,
-                proof_hash: [0u8; 32],
-            },
-            Milestone {
-                weight_bps: 4000,
-                approved: false,
-                paid: false,
-                proof_hash: [0u8; 32],
-            },
-            Milestone {
-                weight_bps: 3000,
-                approved: false,
-                paid: false,
-                proof_hash: [0u8; 32],
-            },
-        ];
-
-        pool.registered_builders = pool.registered_builders.checked_add(1).ok_or(RumboError::MathOverflow)?;
-
-        emit!(ApplicationSubmittedEvent {
-            pool: pool.key(),
-            builder: application.builder,
-            name: builder_name,
-            email: contact_email,
+        emit!(GrantAppliedEvent {
+            applicant: ctx.accounts.applicant.key(),
+            campaign: ctx.accounts.campaign.key(),
+            github_handle,
+            requested_stipend: requested_stipend_lamports,
         });
 
         Ok(())
     }
 
-    /// Committee evaluates a specific milestone for an applicant.
-    pub fn evaluate_milestone(
-        ctx: Context<EvaluateMilestone>,
-        milestone_index: u8,
-        approved: bool,
-        proof_hash: [u8; 32],
+    /// Authorized Committee member attests to the candidate's contribution and assigns a score
+    pub fn attest_contribution(
+        ctx: Context<AttestContribution>,
+        score: u8,
+        approved_stipend_lamports: u64,
     ) -> Result<()> {
-        let index = milestone_index as usize;
-        require!(index < MAX_MILESTONES, RumboError::InvalidMilestoneIndex);
+        require!(score <= 100, RumboError::InvalidScore);
 
+        let campaign = &ctx.accounts.campaign;
         let application = &mut ctx.accounts.application;
-        let milestone = &mut application.milestones[index];
 
-        require!(!milestone.approved, RumboError::MilestoneAlreadyApproved);
+        require!(
+            application.status == ApplicationStatus::Submitted,
+            RumboError::ApplicationAlreadyProcessed
+        );
 
-        milestone.approved = approved;
-        milestone.proof_hash = proof_hash;
+        application.score = score;
 
-        if approved {
-            application.milestone_progress = application
-                .milestone_progress
-                .checked_add(1)
-                .ok_or(RumboError::MathOverflow)?;
-
-            if application.status == ApplicationStatus::Submitted {
-                application.status = ApplicationStatus::Active;
-            }
+        if score >= campaign.min_score_threshold {
+            require!(
+                campaign.total_stipend_disbursed + approved_stipend_lamports <= campaign.total_stipend_cap,
+                RumboError::StipendCapExceeded
+            );
+            application.status = ApplicationStatus::Approved;
+            application.approved_stipend = approved_stipend_lamports;
+        } else {
+            application.status = ApplicationStatus::Rejected;
+            application.approved_stipend = 0;
         }
 
-        emit!(MilestoneEvaluatedEvent {
-            application: application.key(),
-            builder: application.builder,
-            milestone_index,
-            approved,
-            proof_hash,
+        emit!(GrantAttestedEvent {
+            applicant: application.applicant,
+            evaluator: ctx.accounts.evaluator.key(),
+            score,
+            status: application.status,
+            approved_stipend: application.approved_stipend,
         });
 
         Ok(())
     }
 
-    /// Disburse funds for an approved milestone from the vault directly to the builder.
-    pub fn release_milestone_funds(
-        ctx: Context<ReleaseMilestoneFunds>,
-        milestone_index: u8,
-    ) -> Result<()> {
-        let index = milestone_index as usize;
-        require!(index < MAX_MILESTONES, RumboError::InvalidMilestoneIndex);
-
-        let pool = &ctx.accounts.grant_pool;
+    /// Releases the approved travel stipend directly from the Campaign Vault PDA to the builder
+    pub fn disburse_travel_stipend(ctx: Context<DisburseTravelStipend>) -> Result<()> {
         let application = &mut ctx.accounts.application;
-        let milestone = &mut application.milestones[index];
+        let campaign = &mut ctx.accounts.campaign;
 
-        require!(milestone.approved, RumboError::MilestoneNotApproved);
-        require!(!milestone.paid, RumboError::MilestoneAlreadyPaid);
+        require!(
+            application.status == ApplicationStatus::Approved,
+            RumboError::ApplicationNotApproved
+        );
+        require!(
+            application.approved_stipend > 0,
+            RumboError::NoFundsToDisburse
+        );
 
-        // Compute tranche disbursement: (Total * weight_bps) / 10000
-        let tranche_amount = (pool.total_stipend_per_builder as u128)
-            .checked_mul(milestone.weight_bps as u128)
-            .ok_or(RumboError::MathOverflow)?
-            .checked_div(10000)
-            .ok_or(RumboError::MathOverflow)? as u64;
+        let amount = application.approved_stipend;
+        application.approved_stipend = 0; // Prevent re-entrancy / double disbursement
+        application.status = ApplicationStatus::Funded;
 
-        let vault_balance = ctx.accounts.vault.to_account_info().lamports();
-        require!(vault_balance >= tranche_amount, RumboError::InsufficientVaultFunds);
+        campaign.total_stipend_disbursed = campaign
+            .total_stipend_disbursed
+            .checked_add(amount)
+            .ok_or(RumboError::ArithmeticOverflow)?;
 
-        milestone.paid = true;
-        application.funds_claimed = application
-            .funds_claimed
-            .checked_add(tranche_amount)
-            .ok_or(RumboError::MathOverflow)?;
-
-        // Transfer funds from PDA vault to builder
-        let pool_key = pool.key();
+        let season_id_bytes = campaign.season_id.to_le_bytes();
         let seeds = &[
-            b"vault",
-            pool_key.as_ref(),
-            &[pool.vault_bump],
+            b"campaign_vault".as_ref(),
+            campaign.to_account_info().key.as_ref(),
+            &[campaign.vault_bump],
         ];
         let signer_seeds = &[&seeds[..]];
 
-        let cpi_context = CpiContext::new_with_signer(
+        let transfer_ctx = CpiContext::new_with_signer(
             ctx.accounts.system_program.to_account_info(),
             Transfer {
                 from: ctx.accounts.vault.to_account_info(),
-                to: ctx.accounts.builder.to_account_info(),
+                to: ctx.accounts.applicant.to_account_info(),
             },
             signer_seeds,
         );
-        transfer(cpi_context, tranche_amount)?;
 
-        emit!(MilestonePaidEvent {
-            application: application.key(),
-            builder: application.builder,
-            milestone_index,
-            amount_disbursed: tranche_amount,
+        transfer(transfer_ctx, amount)?;
+
+        emit!(StipendDisbursedEvent {
+            applicant: ctx.accounts.applicant.key(),
+            amount,
+            campaign: campaign.key(),
         });
 
         Ok(())
     }
 
-    /// Issues an on-chain non-transferable attendee travel ticket pass credential.
-    pub fn issue_ticket_credential(ctx: Context<IssueTicketCredential>) -> Result<()> {
+    /// Mints a Soulbound on-chain ticket voucher receipt PDA for entry at Breakpoint 2026
+    pub fn claim_breakpoint_ticket(ctx: Context<ClaimBreakpointTicket>) -> Result<()> {
+        let campaign = &mut ctx.accounts.campaign;
         let application = &mut ctx.accounts.application;
-        require!(
-            application.milestone_progress >= 1,
-            RumboError::InsufficientMilestonesForTicket
-        );
-        require!(!application.ticket_issued, RumboError::TicketAlreadyIssued);
+        let ticket = &mut ctx.accounts.ticket;
 
-        let ticket = &mut ctx.accounts.ticket_pass;
-        ticket.pool = ctx.accounts.grant_pool.key();
-        ticket.builder = application.builder;
+        require!(
+            application.status == ApplicationStatus::Funded || application.status == ApplicationStatus::Approved,
+            RumboError::ApplicationNotEligibleForTicket
+        );
+        require!(!application.ticket_claimed, RumboError::TicketAlreadyClaimed);
+        require!(
+            campaign.tickets_awarded < campaign.max_tickets,
+            RumboError::TicketQuotaExceeded
+        );
+
+        application.ticket_claimed = true;
+        campaign.tickets_awarded = campaign
+            .tickets_awarded
+            .checked_add(1)
+            .ok_or(RumboError::ArithmeticOverflow)?;
+
+        ticket.owner = ctx.accounts.applicant.key();
+        ticket.campaign = campaign.key();
+        ticket.ticket_number = campaign.tickets_awarded;
         ticket.issued_at = Clock::get()?.unix_timestamp;
-        ticket.ticket_id = format!("BP2026-{}", &application.builder.to_string()[..8]);
-        ticket.bump = ctx.bumps.ticket_pass;
+        ticket.bump = ctx.bumps.ticket;
 
-        application.ticket_issued = true;
-
-        emit!(TicketCredentialIssuedEvent {
-            pool: ticket.pool,
-            builder: ticket.builder,
-            ticket_id: ticket.ticket_id.clone(),
+        emit!(TicketClaimedEvent {
+            ticket_id: ticket.key(),
+            owner: ticket.owner,
+            ticket_number: ticket.ticket_number,
             issued_at: ticket.issued_at,
-        });
-
-        Ok(())
-    }
-
-    /// Emergency clawback for unused funds after the Breakpoint claim deadline.
-    pub fn clawback_unclaimed(ctx: Context<ClawbackUnclaimed>) -> Result<()> {
-        let pool = &ctx.accounts.grant_pool;
-        require!(
-            Clock::get()?.unix_timestamp > pool.claim_deadline,
-            RumboError::ClawbackLocked
-        );
-
-        let remaining_lamports = ctx.accounts.vault.to_account_info().lamports();
-        require!(remaining_lamports > 0, RumboError::NoFundsAvailable);
-
-        let pool_key = pool.key();
-        let seeds = &[
-            b"vault",
-            pool_key.as_ref(),
-            &[pool.vault_bump],
-        ];
-        let signer_seeds = &[&seeds[..]];
-
-        let cpi_context = CpiContext::new_with_signer(
-            ctx.accounts.system_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.vault.to_account_info(),
-                to: ctx.accounts.authority.to_account_info(),
-            },
-            signer_seeds,
-        );
-        transfer(cpi_context, remaining_lamports)?;
-
-        emit!(ClawbackExecutedEvent {
-            pool: pool.key(),
-            amount: remaining_lamports,
-            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
@@ -295,307 +217,252 @@ pub mod rumbo_protocol {
 }
 
 // -----------------------------------------------------------------------------
-// INSTRUCTION ACCOUNTS
+// ACCOUNT VALIDATION STRUCTS
 // -----------------------------------------------------------------------------
 
 #[derive(Accounts)]
-#[instruction(pool_name: String)]
-pub struct InitializeGrantPool<'info> {
+#[instruction(season_id: u32)]
+pub struct InitializeCampaign<'info> {
     #[account(
         init,
-        payer = authority,
-        space = 8 + GrantPool::INIT_SPACE,
-        seeds = [b"grant_pool", authority.key().as_ref(), pool_name.as_bytes()],
+        payer = admin,
+        space = DISCRIMINATOR_LENGTH + Campaign::INIT_SPACE,
+        seeds = [b"campaign", admin.key().as_ref(), &season_id.to_le_bytes()],
         bump
     )]
-    pub grant_pool: Account<'info, GrantPool>,
+    pub campaign: Account<'info, Campaign>,
 
-    /// CHECK: PDA treasury vault holding grant lamports
+    /// CHECK: PDA Treasury vault holding SOL stipends
     #[account(
         mut,
-        seeds = [b"vault", grant_pool.key().as_ref()],
+        seeds = [b"campaign_vault", campaign.key().as_ref()],
         bump
     )]
     pub vault: SystemAccount<'info>,
 
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub admin: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct ApplyForGrant<'info> {
-    #[account(mut)]
-    pub grant_pool: Account<'info, GrantPool>,
-
     #[account(
         init,
-        payer = builder,
-        space = 8 + BuilderApplication::INIT_SPACE,
-        seeds = [b"application", grant_pool.key().as_ref(), builder.key().as_ref()],
+        payer = applicant,
+        space = DISCRIMINATOR_LENGTH + Application::INIT_SPACE,
+        seeds = [b"application", campaign.key().as_ref(), applicant.key().as_ref()],
         bump
     )]
-    pub application: Account<'info, BuilderApplication>,
+    pub application: Account<'info, Application>,
+
+    pub campaign: Account<'info, Campaign>,
 
     #[account(mut)]
-    pub builder: Signer<'info>,
+    pub applicant: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct EvaluateMilestone<'info> {
+pub struct AttestContribution<'info> {
     #[account(
-        has_one = authority @ RumboError::UnauthorizedCommittee
+        mut,
+        has_one = admin @ RumboError::UnauthorizedCommittee
     )]
-    pub grant_pool: Account<'info, GrantPool>,
+    pub campaign: Account<'info, Campaign>,
 
     #[account(
         mut,
-        has_one = pool @ RumboError::InvalidApplicationPoolRelation
+        seeds = [b"application", campaign.key().as_ref(), application.applicant.as_ref()],
+        bump = application.bump
     )]
-    pub application: Account<'info, BuilderApplication>,
+    pub application: Account<'info, Application>,
 
-    pub authority: Signer<'info>,
+    pub admin: Signer<'info>,
+    pub evaluator: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct ReleaseMilestoneFunds<'info> {
-    #[account(
-        mut,
-        has_one = authority @ RumboError::UnauthorizedCommittee
-    )]
-    pub grant_pool: Account<'info, GrantPool>,
+pub struct DisburseTravelStipend<'info> {
+    #[account(mut)]
+    pub campaign: Account<'info, Campaign>,
 
+    /// CHECK: Validated via seeds in CPI transfer
     #[account(
         mut,
-        seeds = [b"vault", grant_pool.key().as_ref()],
-        bump = grant_pool.vault_bump
+        seeds = [b"campaign_vault", campaign.key().as_ref()],
+        bump = campaign.vault_bump
     )]
     pub vault: SystemAccount<'info>,
 
     #[account(
         mut,
-        has_one = pool @ RumboError::InvalidApplicationPoolRelation
+        seeds = [b"application", campaign.key().as_ref(), applicant.key().as_ref()],
+        bump = application.bump
     )]
-    pub application: Account<'info, BuilderApplication>,
+    pub application: Account<'info, Application>,
 
-    /// CHECK: Must match the builder stored in the application account
-    #[account(
-        mut,
-        address = application.builder @ RumboError::UnauthorizedBuilder
-    )]
-    pub builder: SystemAccount<'info>,
+    /// CHECK: Payout recipient
+    #[account(mut, address = application.applicant)]
+    pub applicant: SystemAccount<'info>,
 
-    pub authority: Signer<'info>,
-
+    pub admin: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct IssueTicketCredential<'info> {
-    pub grant_pool: Account<'info, GrantPool>,
+pub struct ClaimBreakpointTicket<'info> {
+    #[account(mut)]
+    pub campaign: Account<'info, Campaign>,
 
     #[account(
         mut,
-        has_one = pool @ RumboError::InvalidApplicationPoolRelation,
-        has_one = builder @ RumboError::UnauthorizedBuilder
+        seeds = [b"application", campaign.key().as_ref(), applicant.key().as_ref()],
+        bump = application.bump
     )]
-    pub application: Account<'info, BuilderApplication>,
+    pub application: Account<'info, Application>,
 
     #[account(
         init,
-        payer = builder,
-        space = 8 + TicketPass::INIT_SPACE,
-        seeds = [b"ticket", grant_pool.key().as_ref(), builder.key().as_ref()],
+        payer = applicant,
+        space = DISCRIMINATOR_LENGTH + BreakpointTicket::INIT_SPACE,
+        seeds = [b"ticket", campaign.key().as_ref(), applicant.key().as_ref()],
         bump
     )]
-    pub ticket_pass: Account<'info, TicketPass>,
+    pub ticket: Account<'info, BreakpointTicket>,
 
-    #[account(mut)]
-    pub builder: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct ClawbackUnclaimed<'info> {
-    #[account(
-        mut,
-        has_one = authority @ RumboError::UnauthorizedCommittee
-    )]
-    pub grant_pool: Account<'info, GrantPool>,
-
-    #[account(
-        mut,
-        seeds = [b"vault", grant_pool.key().as_ref()],
-        bump = grant_pool.vault_bump
-    )]
-    pub vault: SystemAccount<'info>,
-
-    #[account(mut)]
-    pub authority: Signer<'info>,
+    #[account(mut, address = application.applicant)]
+    pub applicant: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
 // -----------------------------------------------------------------------------
-// STATE STRUCTS
+// STATE DEFINITIONS
 // -----------------------------------------------------------------------------
 
 #[account]
 #[derive(InitSpace)]
-pub struct GrantPool {
-    pub authority: Pubkey,
-    #[max_len(64)]
-    pub pool_name: String,
-    pub total_stipend_per_builder: u64,
-    pub max_builders: u32,
-    pub registered_builders: u32,
-    pub disbursed_funds: u64,
-    pub claim_deadline: i64,
+pub struct Campaign {
+    pub admin: Pubkey,
+    pub season_id: u32,
+    pub max_tickets: u32,
+    pub tickets_awarded: u32,
+    pub total_stipend_cap: u64,
+    pub total_stipend_disbursed: u64,
+    pub min_score_threshold: u8,
     pub bump: u8,
     pub vault_bump: u8,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+#[account]
+#[derive(InitSpace)]
+pub struct Application {
+    pub applicant: Pubkey,
+    pub campaign: Pubkey,
+    #[max_len(64)]
+    pub legal_name: String,
+    #[max_len(64)]
+    pub github_handle: String,
+    pub project_commit_hash: [u8; 32],
+    pub requested_stipend: u64,
+    pub approved_stipend: u64,
+    pub score: u8,
+    pub status: ApplicationStatus,
+    pub ticket_claimed: bool,
+    pub bump: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct BreakpointTicket {
+    pub owner: Pubkey,
+    pub campaign: Pubkey,
+    pub ticket_number: u32,
+    pub issued_at: i64,
+    pub bump: u8,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace, Debug)]
 pub enum ApplicationStatus {
     Submitted,
-    Active,
-    Completed,
+    Approved,
     Rejected,
+    Funded,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, InitSpace)]
-pub struct Milestone {
-    pub weight_bps: u16,
-    pub approved: bool,
-    pub paid: bool,
-    pub proof_hash: [u8; 32],
+// -----------------------------------------------------------------------------
+// EVENTS & ERRORS
+// -----------------------------------------------------------------------------
+
+#[event]
+pub struct CampaignInitializedEvent {
+    pub season_id: u32,
+    pub admin: Pubkey,
+    pub total_stipend_cap: u64,
+    pub max_tickets: u32,
 }
 
-#[account]
-#[derive(InitSpace)]
-pub struct BuilderApplication {
-    pub pool: Pubkey,
-    pub builder: Pubkey,
-    #[max_len(64)]
-    pub builder_name: String,
-    #[max_len(128)]
-    pub contact_email: String,
+#[event]
+pub struct GrantAppliedEvent {
+    pub applicant: Pubkey,
+    pub campaign: Pubkey,
+    pub github_handle: String,
+    pub requested_stipend: u64,
+}
+
+#[event]
+pub struct GrantAttestedEvent {
+    pub applicant: Pubkey,
+    pub evaluator: Pubkey,
+    pub score: u8,
     pub status: ApplicationStatus,
-    pub milestone_progress: u8,
-    pub funds_claimed: u64,
-    pub ticket_issued: bool,
-    pub bump: u8,
-    pub milestones: [Milestone; 3],
-}
-
-#[account]
-#[derive(InitSpace)]
-pub struct TicketPass {
-    pub pool: Pubkey,
-    pub builder: Pubkey,
-    pub issued_at: i64,
-    #[max_len(32)]
-    pub ticket_id: String,
-    pub bump: u8,
-}
-
-// -----------------------------------------------------------------------------
-// EVENTS
-// -----------------------------------------------------------------------------
-
-#[event]
-pub struct GrantPoolInitializedEvent {
-    pub pool: Pubkey,
-    pub authority: Pubkey,
-    pub total_stipend_per_builder: u64,
-    pub max_builders: u32,
-    pub claim_deadline: i64,
+    pub approved_stipend: u64,
 }
 
 #[event]
-pub struct ApplicationSubmittedEvent {
-    pub pool: Pubkey,
-    pub builder: Pubkey,
-    pub name: String,
-    pub email: String,
-}
-
-#[event]
-pub struct MilestoneEvaluatedEvent {
-    pub application: Pubkey,
-    pub builder: Pubkey,
-    pub milestone_index: u8,
-    pub approved: bool,
-    pub proof_hash: [u8; 32],
-}
-
-#[event]
-pub struct MilestonePaidEvent {
-    pub application: Pubkey,
-    pub builder: Pubkey,
-    pub milestone_index: u8,
-    pub amount_disbursed: u64,
-}
-
-#[event]
-pub struct TicketCredentialIssuedEvent {
-    pub pool: Pubkey,
-    pub builder: Pubkey,
-    pub ticket_id: String,
-    pub issued_at: i64,
-}
-
-#[event]
-pub struct ClawbackExecutedEvent {
-    pub pool: Pubkey,
+pub struct StipendDisbursedEvent {
+    pub applicant: Pubkey,
     pub amount: u64,
-    pub timestamp: i64,
+    pub campaign: Pubkey,
 }
 
-// -----------------------------------------------------------------------------
-// ERROR CODES
-// -----------------------------------------------------------------------------
+#[event]
+pub struct TicketClaimedEvent {
+    pub ticket_id: Pubkey,
+    pub owner: Pubkey,
+    pub ticket_number: u32,
+    pub issued_at: i64,
+}
 
 #[error_code]
 pub enum RumboError {
-    #[msg("String exceeds maximum allowable byte length")]
-    StringExceedsLimit,
-    #[msg("Stipend amount must be greater than zero")]
-    InvalidStipendAmount,
-    #[msg("Claim deadline must be set in the future")]
-    InvalidDeadline,
-    #[msg("Grant pool has reached full capacity")]
-    PoolCapacityReached,
-    #[msg("Milestone application deadline has expired")]
-    DeadlineExceeded,
-    #[msg("Invalid milestone index requested")]
-    InvalidMilestoneIndex,
-    #[msg("Milestone has already been reviewed and approved")]
-    MilestoneAlreadyApproved,
-    #[msg("Milestone has not yet been approved by the committee")]
-    MilestoneNotApproved,
-    #[msg("Milestone funds have already been claimed and disbursed")]
-    MilestoneAlreadyPaid,
-    #[msg("Insufficient lamports available inside the PDA vault")]
-    InsufficientVaultFunds,
-    #[msg("Builder must complete at least 1 milestone to unlock ticket credential")]
-    InsufficientMilestonesForTicket,
-    #[msg("Ticket credential has already been minted for this builder")]
-    TicketAlreadyIssued,
-    #[msg("Grant pool deadline has not yet elapsed for clawback")]
-    ClawbackLocked,
-    #[msg("No funds available in vault to clawback")]
-    NoFundsAvailable,
-    #[msg("Unauthorized: Caller is not the registered grant authority")]
+    #[msg("Provided legal name exceeds maximum allowed length of 64 bytes.")]
+    NameTooLong,
+    #[msg("Provided GitHub handle exceeds maximum allowed length of 64 bytes.")]
+    HandleTooLong,
+    #[msg("Requested stipend lamports must be greater than zero.")]
+    InvalidRequestedAmount,
+    #[msg("Score must be an integer between 0 and 100.")]
+    InvalidScore,
+    #[msg("Application has already been evaluated.")]
+    ApplicationAlreadyProcessed,
+    #[msg("Stipend request exceeds remaining campaign treasury cap.")]
+    StipendCapExceeded,
+    #[msg("Application status is not approved for funding.")]
+    ApplicationNotApproved,
+    #[msg("No approved funds available for disbursement.")]
+    NoFundsToDisburse,
+    #[msg("Application does not satisfy eligibility criteria for ticket claim.")]
+    ApplicationNotEligibleForTicket,
+    #[msg("Breakpoint ticket already claimed by this applicant.")]
+    TicketAlreadyClaimed,
+    #[msg("Maximum ticket quota for Breakpoint 2026 has been reached.")]
+    TicketQuotaExceeded,
+    #[msg("Signer is not authorized to act as the campaign committee administrator.")]
     UnauthorizedCommittee,
-    #[msg("Unauthorized: Signer does not match the application builder")]
-    UnauthorizedBuilder,
-    #[msg("Application does not belong to the supplied grant pool")]
-    InvalidApplicationPoolRelation,
-    #[msg("Arithmetic overflow detected in state transition")]
-    MathOverflow,
+    #[msg("Math arithmetic overflow.")]
+    ArithmeticOverflow,
 }

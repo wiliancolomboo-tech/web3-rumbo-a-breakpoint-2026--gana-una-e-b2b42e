@@ -1,0 +1,11 @@
+GET /healthz
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "status": "HEALTHY",
+  "solana_rpc_connected": true,
+  "last_slot_indexed": 298492041,
+  "queue_backlog": 0,
+  "uptime_seconds": 84920
+}

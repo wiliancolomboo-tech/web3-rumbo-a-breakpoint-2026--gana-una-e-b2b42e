@@ -1,0 +1,7 @@
+rumbopass_rpc_slot
+rumbopass_campaign_state
+rumbopass_entries_total
+rumbopass_claims_total
+rumbopass_notification_success_total
+rumbopass_notification_failure_total
+rumbopass_last_processed_signature_timestamp

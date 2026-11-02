@@ -1,0 +1,27 @@
+version: "3.8"
+
+services:
+  rumbo-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rumbo_breakpoint_worker
+    restart: always
+    environment:
+      - PORT=8080
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - PROGRAM_ID=Rumbok2j6pT8WwzGk4n4YqH2vF5aQ9S1zX3kM7mN8bV
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

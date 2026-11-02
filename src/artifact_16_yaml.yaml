@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  rumbo-oracle-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - SOLANA_WSS_URL=wss://api.devnet.solana.com
+      - PROGRAM_ID=RumbobReakpo1nt2026GrantEscrow1111111111111
+      - JURY_KEYPAIR_PATH=/usr/src/app/keys/jury-keypair.json
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - SENDER_EMAIL=grants@rumbobreakpoint.lat
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keys:/usr/src/app/keys:ro

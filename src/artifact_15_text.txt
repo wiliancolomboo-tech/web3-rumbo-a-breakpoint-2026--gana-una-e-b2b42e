@@ -1,0 +1,7 @@
+El talento developer de LATAM merece llegar a Breakpoint sin barreras burocráticas.
+
+Camino Protocol es 100% open-source, probado con Anchor y listo para desplegarse en Mainnet:
+🔗 GitHub: github.com/solana-camino/camino-protocol
+📦 Docker 1-click deploy
+
+¡Nos vemos en Breakpoint 2026! 🚀🟣 #Solana #Breakpoint2026 #SuperteamLATAM

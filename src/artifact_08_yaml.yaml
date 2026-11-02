@@ -1,23 +1,21 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  rumbo-agent:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: rumbo-breakpoint-agent
+  rumbo-orchestrator:
+    build: .
     restart: always
     environment:
-      - SOLANA_RPC_URL=${SOLANA_RPC_URL}
-      - PROGRAM_ID=${PROGRAM_ID}
+      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+      - PROGRAM_ID=RumbobREAk202611111111111111111111111111111
       - RESEND_API_KEY=${RESEND_API_KEY}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - SENDER_EMAIL=${SENDER_EMAIL}
-      - PORT=8080
+      - KEYPAIR_PATH=/secrets/authority-keypair.json
+    volumes:
+      - ./secrets:/secrets:ro
     ports:
       - "8080:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

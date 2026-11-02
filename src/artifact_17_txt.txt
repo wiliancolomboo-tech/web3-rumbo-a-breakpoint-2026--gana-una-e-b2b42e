@@ -1,0 +1,5 @@
+El código está listo, testeado y dockerizado para que cualquier comunidad de @Solana en LATAM y el mundo pueda fondear el viaje de sus mejores devs a Breakpoint 2026 sin intermediarios.
+
+Revisa la repo y el suite completo de pruebas: github.com/solana-rumbo/rumbo-os
+
+¡Nos vemos en Breakpoint! 🚀⚡

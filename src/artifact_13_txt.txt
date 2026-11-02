@@ -1,0 +1,7 @@
+client/
+├── package.json
+├── tsconfig.json
+├── src/
+│   ├── emailService.rs -> resendClient.ts
+│   ├── index.ts
+│   └── webhookService.ts

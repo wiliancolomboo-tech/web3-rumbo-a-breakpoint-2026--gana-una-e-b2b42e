@@ -1,0 +1,92 @@
+import { describe, expect, test } from "vitest";
+import { evaluate, selectWinners } from "./index.js";
+
+const wallet = "11111111111111111111111111111111";
+
+test("eligible candidate receives deterministic hash", () => {
+  const input = {
+    wallet,
+    email: "winner@example.com",
+    tasks: [
+      { id: "b", points: 40, verified: true },
+      { id: "a", points: 40, verified: true },
+    ],
+  };
+
+  const a = evaluate(input, 70, "breakpoint-2026");
+  const b = evaluate(
+    {
+      ...input,
+      tasks: [...input.tasks].reverse(),
+    },
+    70,
+    "breakpoint-2026"
+  );
+
+  expect(a.eligible).toBe(true);
+  expect(a.score).toBe(80);
+  expect(a.candidateHash).toBe(b.candidateHash);
+});
+
+test("unverified task does not contribute points", () => {
+  const result = evaluate(
+    {
+      wallet,
+      email: "user@example.com",
+      tasks: [
+        { id: "verified", points: 50, verified: true },
+        { id: "unverified", points: 50, verified: false },
+      ],
+    },
+    70,
+    "campaign"
+  );
+
+  expect(result.score).toBe(50);
+  expect(result.eligible).toBe(false);
+});
+
+test("duplicate tasks are rejected", () => {
+  expect(() =>
+    evaluate(
+      {
+        wallet,
+        email: "user@example.com",
+        tasks: [
+          { id: "same", points: 50, verified: true },
+          { id: "same", points: 50, verified: true },
+        ],
+      },
+      70,
+      "campaign"
+    )
+  ).toThrow("Duplicate");
+});
+
+test("winner selection is deterministic", () => {
+  const decisions = [
+    { wallet, eligible: true, score: 80, candidateHash: "a", reason: "ok" },
+    { wallet: wallet.replace(/1/g, "2"), eligible: true, score: 80, candidateHash: "b", reason: "ok" },
+    { wallet: wallet.replace(/1/g, "3"), eligible: false, score: 100, candidateHash: "c", reason: "no" },
+  ];
+
+  const first = selectWinners(decisions, 2, "seed");
+  const second = selectWinners(decisions, 2, "seed");
+
+  expect(first).toEqual(second);
+  expect(first).toHaveLength(2);
+});
+
+test("invalid wallet is rejected", () => {
+  expect(() =>
+    evaluate(
+      {
+        wallet: "invalid",
+        email: "user@example.com",
+        tasks: [],
+      },
+      70,
+      "campaign"
+    )
+  ).toThrow("Invalid Solana wallet");
+});

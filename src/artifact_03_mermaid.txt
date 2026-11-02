@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor Sponsor as Grant Sponsor (Superteam / Foundation)
+    actor Builder as Builder (Applicant)
+    actor Juror as Committee Juror
+    participant Anchor as Solana Program (Escrow PDA)
+    participant Worker as Voyager Agent Daemon
+    participant Resend as Resend Mail Engine
+    participant Discord as Discord Webhook
+
+    Sponsor->>Anchor: initialize_campaign(budget, juror_quorum, expiry)
+    Anchor-->>Sponsor: Campaign Initialized (Escrow Vault Ready)
+
+    Builder->>Anchor: register_applicant(metadata_uri, track)
+    Anchor-->>Builder: Application PDA Initialized (State: PendingReview)
+
+    Juror->>Anchor: cast_score(applicant_pda, score, rubric_signature)
+    Anchor-->>Juror: Score Appended (Consensus Evaluation)
+
+    Note over Anchor: Quorum Reached -> Applicant Approved
+    Anchor->>Worker: Emit ApplicationApprovedEvent
+    Worker->>Discord: Post Approval Notification & Funding Allocation
+    Worker->>Resend: Send "Next Steps: Submit Flight & Ticket Proof"
+
+    Builder->>Worker: Submit Breakpoint Ticket ID & Travel Proof
+    Worker->>Anchor: submit_milestone_proof(milestone_idx=1, proof_hash)
+    Anchor->>Anchor: Validate Proof Hash & State
+    Anchor->>Builder: Release 60% Travel Prep Grant (USDC)
+    Worker->>Discord: Milestone 1 Disbursed Notification
+
+    Note over Builder,Anchor: Breakpoint Venue Check-In (Breakpoint 2026)
+    Builder->>Worker: Venue Geolocation / RFID Attestation
+    Worker->>Anchor: claim_final_milestone(milestone_idx=2)
+    Anchor->>Builder: Release 40% Final Grant Balance
+    Anchor-->>Builder: Emit VoyagerCompletedEvent

@@ -1,0 +1,20 @@
++-----------------------------------------------------------------------------------+
+|                              RUMBO PROTOCOL ENGINE                                |
++-----------------------------------------------------------------------------------+
+        |                                                           |
+   (Anchor RPC)                                             (WebSocket Events)
+        v                                                           v
++-----------------------+                               +-----------------------+
+|  Solana Mainnet-Beta  |                               |   Orchestrator Worker |
+|   - Program PDA       |                               |   - Event Monitor     |
+|   - Vault Token Acct  |                               |   - GitHub Verifier   |
+|   - Builder Registry  |                               |   - Multi-Sig Relay   |
++-----------------------+                               +-----------------------+
+                                                                    |
+                                        +---------------------------+---------------------------+
+                                        |                                                       |
+                                        v                                                       v
+                             +--------------------+                                  +--------------------+
+                             | Resend API Service |                                  | Discord/Slack Hook |
+                             | (Email/Ticket PDF) |                                  | (Live Jury Audit)  |
+                             +--------------------+                                  +--------------------+

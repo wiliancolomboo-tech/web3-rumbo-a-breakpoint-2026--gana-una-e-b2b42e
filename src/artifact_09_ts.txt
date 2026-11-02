@@ -1,0 +1,30 @@
+const [, , command, ...args] = process.argv;
+
+async function request(path: string, body: unknown) {
+  const response = await fetch(`${process.env.API_URL ?? "http://localhost:3000"}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(JSON.stringify(data));
+  console.log(JSON.stringify(data, null, 2));
+}
+
+if (command === "apply") {
+  const [campaignId, wallet, email] = args;
+
+  await request(`/v1/campaigns/${campaignId}/applications`, {
+    wallet,
+    email,
+    tasks: [
+      { id: "solana-wallet", points: 30, verified: true },
+      { id: "community-contribution", points: 25, verified: true },
+      { id: "technical-task", points: 45, verified: true },
+    ],
+  });
+} else {
+  console.error("Usage: npm run cli -- apply <campaignId> <wallet> <email>");
+  process.exit(1);
+}

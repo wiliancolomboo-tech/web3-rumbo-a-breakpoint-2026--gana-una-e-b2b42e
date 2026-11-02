@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  breakpoint-verification-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: breakpoint_quest_daemon
+    restart: unless-stopped
+    environment:
+      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+      - SOLANA_WS_URL=wss://api.mainnet-beta.solana.com
+      - PROGRAM_ID=RumbobReakpo1nt2026TravelEscrow11111111111
+      - ORACLE_PRIVATE_KEY=${ORACLE_PRIVATE_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - GITHUB_API_TOKEN=${GITHUB_API_TOKEN}
+      - POLL_INTERVAL_MS=10000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'process.exit(0)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

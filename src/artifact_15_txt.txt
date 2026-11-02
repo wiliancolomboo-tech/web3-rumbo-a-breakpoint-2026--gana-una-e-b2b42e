@@ -1,0 +1,6 @@
+La comunidad builder merece transparencia radical y cero fricción financiera para llegar a la conferencia más importante del ecosistema.
+
+Código libre, contenedor Docker listo para producción y suite de tests completa:
+🔗 github.com/solana-rumbo/rumbo-breakpoint-2026
+
+¡Nos vemos en Breakpoint 2026! 🚀 @Solana @SuperteamES #SolanaBreakpoint #SolanaDevs

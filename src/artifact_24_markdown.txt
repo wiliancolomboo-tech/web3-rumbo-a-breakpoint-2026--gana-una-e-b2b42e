@@ -1,0 +1,15 @@
+1/3 🚀 ¡El camino a Breakpoint 2026 ahora es 100% On-Chain y Verificable!
+
+Presentamos RumboProtocol: el protocolo en @Solana para seleccionar a los mejores builders de LATAM y financiar su viaje a #Breakpoint2026 sin fricciones, sin intermediarios y con cero burocracia. 🇪🇸🇲🇽🇦🇷
+
+2/3 🛠️ ¿Cómo funciona?
+• Smart contracts en Anchor con bóvedas PDA seguras.
+• Desembolsos por hitos: Tranche 1 (Vuelo y visado) y Tranche 2 (Check-in on-site verificado).
+• Automatización completa con bots de Discord y notificaciones transaccionales vía @resend.
+• Clawbacks automáticos para garantizar el retorno de fondos no usados a la tesorería de @SuperteamLATAM.
+
+3/3 Construido con máxima velocidad, sub-cent fees y código auditado listo para producción. 
+¡Nos vemos en el escenario de Solana Breakpoint 2026! 🌴⚡️
+
+GitHub & Docs: https://github.com/superteam-latam/rumbo-a-breakpoint-2026
+cc @SolanaConf @SuperteamLATAM @solana

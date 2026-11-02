@@ -1,0 +1,8 @@
+# Network & Anchor RPC
+SOLANA_RPC_URL=https://api.devnet.solana.com
+PROGRAM_ID=RumbobReakpo1nt2026111111111111111111111111
+ORACLE_KEYPAIR_PATH=./oracle-keypair.json
+
+# Enterprise Notification APIs
+RESEND_API_KEY=re_123456789abcdefABCDEF
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/token_secret_here

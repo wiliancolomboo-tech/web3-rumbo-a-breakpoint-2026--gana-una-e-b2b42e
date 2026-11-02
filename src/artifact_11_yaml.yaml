@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  rumbo-event-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rumbo-breakpoint-agent
+    restart: unless-stopped
+    environment:
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      - PROGRAM_ID=${PROGRAM_ID:-RumbobReakpo1nt2026Trave1EscrowProtoco1111}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

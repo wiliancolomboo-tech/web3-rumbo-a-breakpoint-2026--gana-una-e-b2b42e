@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  rumbo-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rumbo_breakpoint_daemon
+    restart: always
+    environment:
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - PROGRAM_ID=RumbogK9aM8aXG9HNx5mZ3KkH9u4kR3A1b8ZpS7v2vE
+      - COMMITTEE_KEYPAIR_PATH=/secrets/committee-keypair.json
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+    volumes:
+      - ./secrets/committee-keypair.json:/secrets/committee-keypair.json:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

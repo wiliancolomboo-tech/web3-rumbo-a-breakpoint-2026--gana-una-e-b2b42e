@@ -1,0 +1,14 @@
+# Solana Network Configuration
+SOLANA_RPC_URL="https://api.devnet.solana.com"
+PROGRAM_ID="RumbocR3w7pXz6GkZ9BqYQxNkWp4mFvT2eU8sV1d1111"
+ANCHOR_WALLET="/root/.config/solana/id.json"
+IDL_PATH="./target/idl/rumbo_protocol.json"
+
+# Enterprise Communication Rails
+RESEND_API_KEY="re_123456789_enterpriseKey"
+OPERATIONAL_EMAIL="tickets@breakpoint.solana.com"
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/123456789/YourSecretWebhookToken"
+
+# Telemetry
+PORT=8080
+METRICS_ENABLED=true

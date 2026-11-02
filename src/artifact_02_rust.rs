@@ -1,241 +1,203 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("RumbopasS1111111111111111111111111111111111");
+declare_id!("RumbocgN3c5i9Kq1bPnqTjH7u9pB4m2YkYhK7P8hK8k8");
 
 #[program]
-pub mod rumbo_passage {
+pub mod rumbo_protocol {
     use super::*;
 
-    /// Initializes a global Sponsorship Campaign for Breakpoint 2026.
-    pub fn initialize_campaign(
-        ctx: Context<InitializeCampaign>,
-        campaign_id: String,
-        clawback_deadline: i64,
+    /// Initialize protocol configuration and admin governance
+    pub fn initialize_protocol(
+        ctx: Context<InitializeProtocol>,
+        verification_oracle: Pubkey,
     ) -> Result<()> {
-        require!(campaign_id.len() <= 32, RumboError::StringTooLong);
-        let clock = Clock::get()?;
-        require!(
-            clawback_deadline > clock.unix_timestamp,
-            RumboError::InvalidDeadline
-        );
+        let protocol = &mut ctx.accounts.protocol_config;
+        protocol.authority = ctx.accounts.authority.key();
+        protocol.verification_oracle = verification_oracle;
+        protocol.total_grants_created = 0;
+        protocol.total_disbursed_lamports = 0;
+        protocol.bump = ctx.bumps.protocol_config;
 
-        let campaign = &mut ctx.accounts.campaign;
-        campaign.authority = ctx.accounts.authority.key();
-        campaign.vault_mint = ctx.accounts.vault_mint.key();
-        campaign.campaign_id = campaign_id;
-        campaign.clawback_deadline = clawback_deadline;
-        campaign.total_allocated = 0;
-        campaign.total_disbursed = 0;
-        campaign.grantee_count = 0;
-        campaign.bump = ctx.bumps.campaign;
-
-        emit!(CampaignInitialized {
-            campaign: campaign.key(),
-            authority: campaign.authority,
-            clawback_deadline,
+        emit!(ProtocolInitializedEvent {
+            authority: protocol.authority,
+            oracle: verification_oracle,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Allocates a new Grant Escrow for a designated builder/grantee.
+    /// Create and fund a structured travel scholarship grant escrow
     pub fn create_grant(
         ctx: Context<CreateGrant>,
-        total_stipend: u64,
-        milestone_splits: [u8; 3], // Percentage distribution e.g., [40, 40, 20]
+        grant_id: u64,
+        total_amount: u64,
+        num_milestones: u8,
+        destination_event: String,
     ) -> Result<()> {
-        require!(total_stipend > 0, RumboError::InvalidStipendAmount);
-        let sum_split: u8 = milestone_splits.iter().sum();
-        require!(sum_split == 100, RumboError::InvalidMilestoneSplits);
+        require!(total_amount > 0, RumboError::InvalidAmount);
+        require!(num_milestones > 0 && num_milestones <= 5, RumboError::InvalidMilestoneCount);
+        require!(destination_event.len() <= 32, RumboError::StringTooLong);
 
-        let campaign = &mut ctx.accounts.campaign;
         let grant = &mut ctx.accounts.grant;
-
-        grant.campaign = campaign.key();
-        grant.grantee = ctx.accounts.grantee.key();
-        grant.total_amount = total_stipend;
-        grant.amount_released = 0;
-        grant.milestone_splits = milestone_splits;
-        grant.current_milestone = 0; // 0 = Flight/Lodging, 1 = Hackathon/Badge, 2 = Showcase
-        grant.status = GrantStatus::Active;
+        grant.grant_id = grant_id;
+        grant.sponsor = ctx.accounts.sponsor.key();
+        grant.recipient = ctx.accounts.recipient.key();
+        grant.escrow_vault = ctx.accounts.escrow_vault.key();
+        grant.token_mint = ctx.accounts.token_mint.key();
+        grant.total_amount = total_amount;
+        grant.released_amount = 0;
+        grant.num_milestones = num_milestones;
+        grant.completed_milestones = 0;
+        grant.destination_event = destination_event;
+        grant.is_active = true;
         grant.bump = ctx.bumps.grant;
-        grant.vault_bump = ctx.bumps.grant_vault;
+        grant.vault_bump = ctx.bumps.escrow_vault;
 
-        campaign.total_allocated = campaign
-            .total_allocated
-            .checked_add(total_stipend)
-            .ok_or(RumboError::MathOverflow)?;
-        campaign.grantee_count = campaign
-            .grantee_count
-            .checked_add(1)
-            .ok_or(RumboError::MathOverflow)?;
-
-        // Transfer funds from Sponsor funding account to Grant PDA Token Vault
+        // Transfer funds from sponsor into the grant escrow vault
         let cpi_accounts = Transfer {
             from: ctx.accounts.sponsor_token_account.to_account_info(),
-            to: ctx.accounts.grant_vault.to_account_info(),
-            authority: ctx.accounts.authority.to_account_info(),
+            to: ctx.accounts.escrow_vault.to_account_info(),
+            authority: ctx.accounts.sponsor.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        token::transfer(cpi_ctx, total_stipend)?;
+        token::transfer(CpiContext::new(cpi_program, cpi_accounts), total_amount)?;
 
-        emit!(GrantCreated {
-            campaign: campaign.key(),
-            grant: grant.key(),
-            grantee: grant.grantee,
-            amount: total_stipend,
+        let protocol = &mut ctx.accounts.protocol_config;
+        protocol.total_grants_created = protocol.total_grants_created.checked_add(1).unwrap();
+
+        emit!(GrantCreatedEvent {
+            grant_id,
+            sponsor: grant.sponsor,
+            recipient: grant.recipient,
+            total_amount,
+            num_milestones,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Grantee submits milestone proof (e.g. Flight booking PNR hash, Breakpoint badge ID, GitHub PR).
-    pub fn submit_milestone(
-        ctx: Context<SubmitMilestone>,
+    /// Recipient submits proof hash (e.g. SHA-256 of GitHub PR, Devnet tx hash, or presentation)
+    pub fn submit_milestone_proof(
+        ctx: Context<SubmitMilestoneProof>,
         milestone_index: u8,
-        proof_uri: String,
+        proof_hash: [u8; 32],
     ) -> Result<()> {
-        let grant = &mut ctx.accounts.grant;
-        require!(grant.status == GrantStatus::Active, RumboError::GrantNotActive);
-        require!(milestone_index == grant.current_milestone, RumboError::InvalidMilestoneSequence);
-        require!(milestone_index < 3, RumboError::InvalidMilestoneIndex);
-        require!(proof_uri.len() <= 128, RumboError::StringTooLong);
+        let grant = &ctx.accounts.grant;
+        require!(grant.is_active, RumboError::GrantInactive);
+        require!(ctx.accounts.recipient.key() == grant.recipient, RumboError::UnauthorizedRecipient);
+        require!(milestone_index == grant.completed_milestones, RumboError::MilestoneSequenceMismatch);
 
-        let milestone = &mut ctx.accounts.milestone_record;
-        milestone.grant = grant.key();
-        milestone.milestone_index = milestone_index;
-        milestone.proof_uri = proof_uri.clone();
-        milestone.status = MilestoneStatus::Submitted;
-        milestone.submitted_at = Clock::get()?.unix_timestamp;
-        milestone.bump = ctx.bumps.milestone_record;
-
-        emit!(MilestoneSubmitted {
-            grant: grant.key(),
-            grantee: grant.grantee,
+        emit!(MilestoneSubmittedEvent {
+            grant_id: grant.grant_id,
+            recipient: grant.recipient,
             milestone_index,
-            proof_uri,
+            proof_hash,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Sponsor authority reviews and approves milestone, disbursing the tranche to the grantee.
-    pub fn approve_milestone_and_disburse(
-        ctx: Context<ApproveMilestoneAndDisburse>,
+    /// Oracle/Admin validates milestone and triggers proportional milestone disbursement
+    pub fn verify_and_disburse(
+        ctx: Context<VerifyAndDisburse>,
         milestone_index: u8,
     ) -> Result<()> {
-        let campaign = &mut ctx.accounts.campaign;
+        let protocol = &ctx.accounts.protocol_config;
+        require!(
+            ctx.accounts.signer.key() == protocol.verification_oracle || ctx.accounts.signer.key() == protocol.authority,
+            RumboError::UnauthorizedOracle
+        );
+
         let grant = &mut ctx.accounts.grant;
-        let milestone = &mut ctx.accounts.milestone_record;
+        require!(grant.is_active, RumboError::GrantInactive);
+        require!(milestone_index == grant.completed_milestones, RumboError::MilestoneSequenceMismatch);
 
-        require!(grant.status == GrantStatus::Active, RumboError::GrantNotActive);
-        require!(milestone.status == MilestoneStatus::Submitted, RumboError::MilestoneNotSubmitted);
-        require!(milestone.milestone_index == milestone_index, RumboError::InvalidMilestoneIndex);
-        require!(grant.current_milestone == milestone_index, RumboError::InvalidMilestoneSequence);
-
-        let percentage = grant.milestone_splits[milestone_index as usize] as u64;
-        let tranche_amount = grant
-            .total_amount
-            .checked_mul(percentage)
-            .ok_or(RumboError::MathOverflow)?
-            .checked_div(100)
+        let milestone_payout = grant.total_amount
+            .checked_div(grant.num_milestones as u64)
             .ok_or(RumboError::MathOverflow)?;
 
-        // Ensure we do not disburse more than remaining vault balance
-        let remaining = grant.total_amount.checked_sub(grant.amount_released).ok_or(RumboError::MathOverflow)?;
-        let payout = tranche_amount.min(remaining);
+        grant.completed_milestones = grant.completed_milestones.checked_add(1).ok_or(RumboError::MathOverflow)?;
+        grant.released_amount = grant.released_amount.checked_add(milestone_payout).ok_or(RumboError::MathOverflow)?;
 
-        // Sign transfer using Grant PDA seeds
-        let grant_key = grant.key();
-        let seeds = &[
-            b"grant-vault",
-            grant_key.as_ref(),
-            &[grant.vault_bump],
-        ];
-        let signer_seeds = &[&seeds[..]];
-
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.grant_vault.to_account_info(),
-            to: ctx.accounts.grantee_token_account.to_account_info(),
-            authority: ctx.accounts.grant_vault.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-        token::transfer(cpi_ctx, payout)?;
-
-        grant.amount_released = grant
-            .amount_released
-            .checked_add(payout)
-            .ok_or(RumboError::MathOverflow)?;
-        grant.current_milestone = grant
-            .current_milestone
-            .checked_add(1)
-            .ok_or(RumboError::MathOverflow)?;
-
-        if grant.current_milestone >= 3 || grant.amount_released >= grant.total_amount {
-            grant.status = GrantStatus::Completed;
+        if grant.completed_milestones == grant.num_milestones {
+            grant.is_active = false;
         }
 
-        milestone.status = MilestoneStatus::Approved;
-        campaign.total_disbursed = campaign
-            .total_disbursed
-            .checked_add(payout)
-            .ok_or(RumboError::MathOverflow)?;
-
-        emit!(MilestoneApprovedAndDisbursed {
-            grant: grant.key(),
-            grantee: grant.grantee,
-            milestone_index,
-            amount_disbursed: payout,
-        });
-
-        Ok(())
-    }
-
-    /// Sponsor emergency clawback if builder goes unresponsive or milestone deadline expires.
-    pub fn clawback_unclaimed_funds(ctx: Context<ClawbackFunds>) -> Result<()> {
-        let clock = Clock::get()?;
-        let campaign = &ctx.accounts.campaign;
-        let grant = &mut ctx.accounts.grant;
-
-        require!(
-            clock.unix_timestamp >= campaign.clawback_deadline,
-            RumboError::ClawbackDeadlineNotMet
-        );
-        require!(grant.status == GrantStatus::Active, RumboError::GrantAlreadyClosed);
-
-        let unreleased_funds = grant
-            .total_amount
-            .checked_sub(grant.amount_released)
-            .ok_or(RumboError::MathOverflow)?;
-
-        require!(unreleased_funds > 0, RumboError::NoFundsRemaining);
-
-        let grant_key = grant.key();
+        let grant_id_bytes = grant.grant_id.to_le_bytes();
         let seeds = &[
-            b"grant-vault",
-            grant_key.as_ref(),
+            b"grant_vault",
+            grant_id_bytes.as_ref(),
             &[grant.vault_bump],
         ];
         let signer_seeds = &[&seeds[..]];
 
         let cpi_accounts = Transfer {
-            from: ctx.accounts.grant_vault.to_account_info(),
-            to: ctx.accounts.sponsor_token_account.to_account_info(),
-            authority: ctx.accounts.grant_vault.to_account_info(),
+            from: ctx.accounts.escrow_vault.to_account_info(),
+            to: ctx.accounts.recipient_token_account.to_account_info(),
+            authority: ctx.accounts.escrow_vault.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
-        let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
-        token::transfer(cpi_ctx, unreleased_funds)?;
+        token::transfer(
+            CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds),
+            milestone_payout,
+        )?;
 
-        grant.status = GrantStatus::ClawedBack;
+        let protocol_mut = &mut ctx.accounts.protocol_config;
+        protocol_mut.total_disbursed_lamports = protocol_mut
+            .total_disbursed_lamports
+            .checked_add(milestone_payout)
+            .ok_or(RumboError::MathOverflow)?;
 
-        emit!(GrantClawedBack {
-            grant: grant.key(),
-            amount_refunded: unreleased_funds,
-            recipient: ctx.accounts.sponsor_token_account.key(),
+        emit!(MilestoneDisbursedEvent {
+            grant_id: grant.grant_id,
+            recipient: grant.recipient,
+            milestone_index,
+            amount_disbursed: milestone_payout,
+            all_milestones_completed: !grant.is_active,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    /// Emergency revocation by protocol authority in case of fraud
+    pub fn emergency_cancel_grant(ctx: Context<EmergencyCancelGrant>) -> Result<()> {
+        let grant = &mut ctx.accounts.grant;
+        require!(grant.is_active, RumboError::GrantInactive);
+
+        let remaining_balance = ctx.accounts.escrow_vault.amount;
+        require!(remaining_balance > 0, RumboError::NoFundsInEscrow);
+
+        grant.is_active = false;
+
+        let grant_id_bytes = grant.grant_id.to_le_bytes();
+        let seeds = &[
+            b"grant_vault",
+            grant_id_bytes.as_ref(),
+            &[grant.vault_bump],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.escrow_vault.to_account_info(),
+            to: ctx.accounts.sponsor_refund_account.to_account_info(),
+            authority: ctx.accounts.escrow_vault.to_account_info(),
+        };
+        let cpi_program = ctx.accounts.token_program.to_account_info();
+        token::transfer(
+            CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds),
+            remaining_balance,
+        )?;
+
+        emit!(GrantCancelledEvent {
+            grant_id: grant.grant_id,
+            refund_recipient: ctx.accounts.sponsor_refund_account.key(),
+            refunded_amount: remaining_balance,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
@@ -247,303 +209,251 @@ pub mod rumbo_passage {
 // -----------------------------------------------------------------------------
 
 #[derive(Accounts)]
-#[instruction(campaign_id: String)]
-pub struct InitializeCampaign<'info> {
+pub fn initialize_protocol(ctx: Context<InitializeProtocol>) -> Result<()> {
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct InitializeProtocol<'info> {
     #[account(
         init,
         payer = authority,
-        space = 8 + CampaignConfig::INIT_SPACE,
-        seeds = [b"campaign", authority.key().as_ref(), campaign_id.as_bytes()],
+        space = 8 + ProtocolConfig::INIT_SPACE,
+        seeds = [b"protocol_config"],
         bump
     )]
-    pub campaign: Account<'info, CampaignConfig>,
-    pub vault_mint: Account<'info, Mint>,
+    pub protocol_config: Account<'info, ProtocolConfig>,
     #[account(mut)]
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
+#[instruction(grant_id: u64)]
 pub struct CreateGrant<'info> {
     #[account(
         mut,
-        has_one = authority @ RumboError::Unauthorized,
-        has_one = vault_mint @ RumboError::MismatchedMint
+        seeds = [b"protocol_config"],
+        bump = protocol_config.bump
     )]
-    pub campaign: Account<'info, CampaignConfig>,
-    pub vault_mint: Account<'info, Mint>,
-    /// CHECK: Grantee wallet receiving the travel stipends
-    pub grantee: AccountInfo<'info>,
+    pub protocol_config: Account<'info, ProtocolConfig>,
 
     #[account(
         init,
-        payer = authority,
-        space = 8 + GrantEscrow::INIT_SPACE,
-        seeds = [b"grant", campaign.key().as_ref(), grantee.key().as_ref()],
+        payer = sponsor,
+        space = 8 + Grant::INIT_SPACE,
+        seeds = [b"grant", grant_id.to_le_bytes().as_ref()],
         bump
     )]
-    pub grant: Account<'info, GrantEscrow>,
+    pub grant: Account<'info, Grant>,
 
     #[account(
         init,
-        payer = authority,
-        seeds = [b"grant-vault", grant.key().as_ref()],
+        payer = sponsor,
+        seeds = [b"grant_vault", grant_id.to_le_bytes().as_ref()],
         bump,
-        token::mint = vault_mint,
-        token::authority = grant_vault
+        token::mint = token_mint,
+        token::authority = escrow_vault
     )]
-    pub grant_vault: Account<'info, TokenAccount>,
+    pub escrow_vault: Account<'info, TokenAccount>,
+
+    pub token_mint: Account<'info, Mint>,
 
     #[account(
         mut,
-        constraint = sponsor_token_account.mint == vault_mint.key() @ RumboError::MismatchedMint,
-        constraint = sponsor_token_account.owner == authority.key() @ RumboError::Unauthorized
+        constraint = sponsor_token_account.mint == token_mint.key(),
+        constraint = sponsor_token_account.owner == sponsor.key()
     )]
     pub sponsor_token_account: Account<'info, TokenAccount>,
 
+    /// CHECK: Grant recipient validated upon submission
+    pub recipient: AccountInfo<'info>,
+
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub sponsor: Signer<'info>,
+
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
-#[instruction(milestone_index: u8)]
-pub struct SubmitMilestone<'info> {
+pub struct SubmitMilestoneProof<'info> {
     #[account(
-        mut,
-        has_one = grantee @ RumboError::Unauthorized
+        seeds = [b"grant", grant.grant_id.to_le_bytes().as_ref()],
+        bump = grant.bump
     )]
-    pub grant: Account<'info, GrantEscrow>,
-
-    #[account(
-        init_if_needed,
-        payer = grantee,
-        space = 8 + MilestoneRecord::INIT_SPACE,
-        seeds = [b"milestone", grant.key().as_ref(), &[milestone_index]],
-        bump
-    )]
-    pub milestone_record: Account<'info, MilestoneRecord>,
-
-    #[account(mut)]
-    pub grantee: Signer<'info>,
-    pub system_program: Program<'info, System>,
+    pub grant: Account<'info, Grant>,
+    pub recipient: Signer<'info>,
 }
 
 #[derive(Accounts)]
-#[instruction(milestone_index: u8)]
-pub struct ApproveMilestoneAndDisburse<'info> {
+pub struct VerifyAndDisburse<'info> {
     #[account(
         mut,
-        has_one = authority @ RumboError::Unauthorized,
-        has_one = vault_mint @ RumboError::MismatchedMint
+        seeds = [b"protocol_config"],
+        bump = protocol_config.bump
     )]
-    pub campaign: Account<'info, CampaignConfig>,
-    pub vault_mint: Account<'info, Mint>,
+    pub protocol_config: Account<'info, ProtocolConfig>,
 
     #[account(
         mut,
-        has_one = campaign @ RumboError::MismatchedCampaign
+        seeds = [b"grant", grant.grant_id.to_le_bytes().as_ref()],
+        bump = grant.bump
     )]
-    pub grant: Account<'info, GrantEscrow>,
+    pub grant: Account<'info, Grant>,
 
     #[account(
         mut,
-        seeds = [b"milestone", grant.key().as_ref(), &[milestone_index]],
-        bump = milestone_record.bump
-    )]
-    pub milestone_record: Account<'info, MilestoneRecord>,
-
-    #[account(
-        mut,
-        seeds = [b"grant-vault", grant.key().as_ref()],
+        seeds = [b"grant_vault", grant.grant_id.to_le_bytes().as_ref()],
         bump = grant.vault_bump
     )]
-    pub grant_vault: Account<'info, TokenAccount>,
+    pub escrow_vault: Account<'info, TokenAccount>,
 
     #[account(
         mut,
-        constraint = grantee_token_account.owner == grant.grantee @ RumboError::MismatchedGrantee,
-        constraint = grantee_token_account.mint == vault_mint.key() @ RumboError::MismatchedMint
+        constraint = recipient_token_account.mint == grant.token_mint,
+        constraint = recipient_token_account.owner == grant.recipient
     )]
-    pub grantee_token_account: Account<'info, TokenAccount>,
+    pub recipient_token_account: Account<'info, TokenAccount>,
 
-    pub authority: Signer<'info>,
+    pub signer: Signer<'info>,
     pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
-pub struct ClawbackFunds<'info> {
+pub struct EmergencyCancelGrant<'info> {
     #[account(
-        mut,
-        has_one = authority @ RumboError::Unauthorized,
-        has_one = vault_mint @ RumboError::MismatchedMint
+        seeds = [b"protocol_config"],
+        bump = protocol_config.bump,
+        has_one = authority
     )]
-    pub campaign: Account<'info, CampaignConfig>,
-    pub vault_mint: Account<'info, Mint>,
+    pub protocol_config: Account<'info, ProtocolConfig>,
 
     #[account(
         mut,
-        has_one = campaign @ RumboError::MismatchedCampaign
+        seeds = [b"grant", grant.grant_id.to_le_bytes().as_ref()],
+        bump = grant.bump
     )]
-    pub grant: Account<'info, GrantEscrow>,
+    pub grant: Account<'info, Grant>,
 
     #[account(
         mut,
-        seeds = [b"grant-vault", grant.key().as_ref()],
+        seeds = [b"grant_vault", grant.grant_id.to_le_bytes().as_ref()],
         bump = grant.vault_bump
     )]
-    pub grant_vault: Account<'info, TokenAccount>,
+    pub escrow_vault: Account<'info, TokenAccount>,
 
     #[account(
         mut,
-        constraint = sponsor_token_account.owner == authority.key() @ RumboError::Unauthorized,
-        constraint = sponsor_token_account.mint == vault_mint.key() @ RumboError::MismatchedMint
+        constraint = sponsor_refund_account.mint == grant.token_mint,
+        constraint = sponsor_refund_account.owner == grant.sponsor
     )]
-    pub sponsor_token_account: Account<'info, TokenAccount>,
+    pub sponsor_refund_account: Account<'info, TokenAccount>,
 
     pub authority: Signer<'info>,
     pub token_program: Program<'info, Token>,
 }
 
 // -----------------------------------------------------------------------------
-// STATE STRUCTS & ENUMS
+// STATE SCHEMAS
 // -----------------------------------------------------------------------------
 
 #[account]
 #[derive(InitSpace)]
-pub struct CampaignConfig {
+pub struct ProtocolConfig {
     pub authority: Pubkey,
-    pub vault_mint: Pubkey,
-    #[max_len(32)]
-    pub campaign_id: String,
-    pub clawback_deadline: i64,
-    pub total_allocated: u64,
-    pub total_disbursed: u64,
-    pub grantee_count: u32,
+    pub verification_oracle: Pubkey,
+    pub total_grants_created: u64,
+    pub total_disbursed_lamports: u64,
     pub bump: u8,
 }
 
 #[account]
 #[derive(InitSpace)]
-pub struct GrantEscrow {
-    pub campaign: Pubkey,
-    pub grantee: Pubkey,
+pub struct Grant {
+    pub grant_id: u64,
+    pub sponsor: Pubkey,
+    pub recipient: Pubkey,
+    pub escrow_vault: Pubkey,
+    pub token_mint: Pubkey,
     pub total_amount: u64,
-    pub amount_released: u64,
-    pub milestone_splits: [u8; 3],
-    pub current_milestone: u8,
-    pub status: GrantStatus,
+    pub released_amount: u64,
+    pub num_milestones: u8,
+    pub completed_milestones: u8,
+    #[max_len(32)]
+    pub destination_event: String,
+    pub is_active: bool,
     pub bump: u8,
     pub vault_bump: u8,
 }
 
-#[account]
-#[derive(InitSpace)]
-pub struct MilestoneRecord {
-    pub grant: Pubkey,
-    pub milestone_index: u8,
-    #[max_len(128)]
-    pub proof_uri: String,
-    pub status: MilestoneStatus,
-    pub submitted_at: i64,
-    pub bump: u8,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
-pub enum GrantStatus {
-    Active,
-    Completed,
-    ClawedBack,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
-pub enum MilestoneStatus {
-    Pending,
-    Submitted,
-    Approved,
-    Rejected,
-}
-
 // -----------------------------------------------------------------------------
-// EVENTS
+// EVENTS & ERRORS
 // -----------------------------------------------------------------------------
 
 #[event]
-pub struct CampaignInitialized {
-    pub campaign: Pubkey,
+pub struct ProtocolInitializedEvent {
     pub authority: Pubkey,
-    pub clawback_deadline: i64,
+    pub oracle: Pubkey,
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct GrantCreated {
-    pub campaign: Pubkey,
-    pub grant: Pubkey,
-    pub grantee: Pubkey,
-    pub amount: u64,
+pub struct GrantCreatedEvent {
+    pub grant_id: u64,
+    pub sponsor: Pubkey,
+    pub recipient: Pubkey,
+    pub total_amount: u64,
+    pub num_milestones: u8,
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct MilestoneSubmitted {
-    pub grant: Pubkey,
-    pub grantee: Pubkey,
+pub struct MilestoneSubmittedEvent {
+    pub grant_id: u64,
+    pub recipient: Pubkey,
     pub milestone_index: u8,
-    pub proof_uri: String,
+    pub proof_hash: [u8; 32],
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct MilestoneApprovedAndDisbursed {
-    pub grant: Pubkey,
-    pub grantee: Pubkey,
+pub struct MilestoneDisbursedEvent {
+    pub grant_id: u64,
+    pub recipient: Pubkey,
     pub milestone_index: u8,
     pub amount_disbursed: u64,
+    pub all_milestones_completed: bool,
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct GrantClawedBack {
-    pub grant: Pubkey,
-    pub amount_refunded: u64,
-    pub recipient: Pubkey,
+pub struct GrantCancelledEvent {
+    pub grant_id: u64,
+    pub refund_recipient: Pubkey,
+    pub refunded_amount: u64,
+    pub timestamp: i64,
 }
-
-// -----------------------------------------------------------------------------
-// ERROR CODES
-// -----------------------------------------------------------------------------
 
 #[error_code]
 pub enum RumboError {
-    #[msg("String exceeds maximum allowable length")]
+    #[msg("Amount must be greater than zero.")]
+    InvalidAmount,
+    #[msg("Milestone count must be between 1 and 5.")]
+    InvalidMilestoneCount,
+    #[msg("String exceeds maximum allowed length.")]
     StringTooLong,
-    #[msg("Deadline must be positioned in the future")]
-    InvalidDeadline,
-    #[msg("Stipend amount must be greater than zero")]
-    InvalidStipendAmount,
-    #[msg("Milestone splits array must sum precisely to 100%")]
-    InvalidMilestoneSplits,
-    #[msg("Arithmetic overflow detected in calculation")]
+    #[msg("Grant is inactive or already fully disbursed.")]
+    GrantInactive,
+    #[msg("Signer does not match designated recipient.")]
+    UnauthorizedRecipient,
+    #[msg("Milestone proof submitted does not match sequential order.")]
+    MilestoneSequenceMismatch,
+    #[msg("Signer is not authorized oracle or protocol authority.")]
+    UnauthorizedOracle,
+    #[msg("Math arithmetic overflow occurred.")]
     MathOverflow,
-    #[msg("Signer does not possess required authority")]
-    Unauthorized,
-    #[msg("Supplied token mint does not match configuration")]
-    MismatchedMint,
-    #[msg("Grant account is currently not in Active status")]
-    GrantNotActive,
-    #[msg("Milestones must be completed in sequential order")]
-    InvalidMilestoneSequence,
-    #[msg("Invalid milestone index specified")]
-    InvalidMilestoneIndex,
-    #[msg("Milestone has not yet been submitted for review")]
-    MilestoneNotSubmitted,
-    #[msg("Supplied campaign does not match the record on the grant")]
-    MismatchedCampaign,
-    #[msg("Token account does not belong to authorized grantee")]
-    MismatchedGrantee,
-    #[msg("Clawback window is not yet unlocked")]
-    ClawbackDeadlineNotMet,
-    #[msg("Grant has already been finalized or closed")]
-    GrantAlreadyClosed,
-    #[msg("No remaining unreleased funds left in escrow")]
-    NoFundsRemaining,
+    #[msg("No remaining funds in escrow vault.")]
+    NoFundsInEscrow,
 }

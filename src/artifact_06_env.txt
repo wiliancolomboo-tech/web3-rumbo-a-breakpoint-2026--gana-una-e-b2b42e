@@ -1,7 +1,13 @@
+# Solana Configuration
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=RumbopasS1111111111111111111111111111111111
-RESEND_API_KEY=re_1234567890abcdefABCDEF
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your/webhook/url
-SENDER_EMAIL=grants@rumbobreakpoint.org
-RELAYER_PRIVATE_KEY=[12,34,56,...]
+PROGRAM_ID=Rumb026Breakpoint111111111111111111111111111
+ANCHOR_WALLET=./deploy-keypair.json
+
+# Enterprise Notification Credentials
+RESEND_API_KEY=re_123456789_abcdefghijklmnopqrstuvwxyz
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcdefghijk
+SENDER_EMAIL=grants@breakpoint2026.solana.com
+
+# Server Configuration
 PORT=8080
+NODE_ENV=production

@@ -1,0 +1,22 @@
+🧵 1/3
+¡Nos vamos Rumbo a @Solana Breakpoint 2026! 🚀🇪🇸
+
+Presentamos RumboProtocol: el primer motor on-chain de becas de viaje y asignación verificable de entradas para #SolanaBreakpoint. 
+
+Se acabaron las selecciones opacas y los fondos desperdiciados. Código abierto, trazabilidad 100% y pagos por hitos. 👇
+
+🧵 2/3
+¿Cómo funciona RumboProtocol?
+⚙️ Escrow en Anchor: Los fondos ($USDC) se liberan por fases (vuelo, código en Devnet y llegada presencial).
+🎫 Tickets automatizados: Entrega instantánea de tickets VIP con @resendlabs al validar hitos.
+📢 Auditoría pública: Cada desembolso se notifica en tiempo real a Discord/Slack vía RPC events.
+
+🧵 3/3
+Construido por y para la comunidad hispanohablante y global de @Solana.
+
+Invitamos a los sponsors y jueces de Breakpoint a inspeccionar el repo, ejecutar la suite de pruebas unitarias y probar el agente en Devnet.
+
+¡Nos vemos en Breakpoint 2026 construyendo el futuro descentralizado! ☀️🌊
+
+Repo & Docs: https://github.com/solana-rumbo/breakpoint-2026-protocol
+#Solana #Breakpoint2026 #SolanaEcosystem #Rust #Anchor

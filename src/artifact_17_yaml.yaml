@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  flightpath-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: solana-flightpath-daemon
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+      - SOLANA_WS_URL=wss://api.mainnet-beta.solana.com
+      - PROGRAM_ID=FLiGHTPathBreakpoint2026Program1111111111111
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

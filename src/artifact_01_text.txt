@@ -1,0 +1,14 @@
+rumbo-proof/
+├── apps/
+│   ├── api/                  # API HTTP y CLI
+│   └── worker/               # Cola de emails/webhooks
+├── packages/
+│   ├── engine/               # Motor determinista de elegibilidad
+│   ├── crypto/               # Firmas Ed25519
+│   └── solana/               # Cliente Solana
+├── programs/
+│   └── rumbo_registry/       # Programa Anchor
+├── tests/
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example

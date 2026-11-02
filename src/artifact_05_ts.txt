@@ -1,0 +1,105 @@
+import { createHash } from "node:crypto";
+
+export type Task = {
+  id: string;
+  points: number;
+  verified: boolean;
+};
+
+export type Candidate = {
+  wallet: string;
+  email: string;
+  tasks: Task[];
+};
+
+export type Decision = {
+  wallet: string;
+  eligible: boolean;
+  score: number;
+  candidateHash: string;
+  reason: string;
+};
+
+const MAX_SCORE = 10_000;
+
+export function evaluate(
+  candidate: Candidate,
+  minScore: number,
+  campaignId: string
+): Decision {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(candidate.wallet)) {
+    throw new Error("Invalid Solana wallet");
+  }
+
+  if (!candidate.email.includes("@")) {
+    throw new Error("Invalid email");
+  }
+
+  if (!Number.isInteger(minScore) || minScore < 0 || minScore > MAX_SCORE) {
+    throw new Error("Invalid minimum score");
+  }
+
+  const ids = new Set<string>();
+  let score = 0;
+
+  for (const task of candidate.tasks) {
+    if (!task.id || ids.has(task.id)) {
+      throw new Error("Duplicate or empty task id");
+    }
+
+    if (!Number.isInteger(task.points) || task.points < 0 || task.points > MAX_SCORE) {
+      throw new Error("Invalid task points");
+    }
+
+    ids.add(task.id);
+    if (task.verified) score += task.points;
+  }
+
+  score = Math.min(score, MAX_SCORE);
+
+  const normalized = JSON.stringify({
+    campaignId,
+    wallet: candidate.wallet,
+    tasks: [...candidate.tasks]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(({ id, points, verified }) => ({ id, points, verified })),
+    score,
+  });
+
+  const candidateHash = createHash("sha256")
+    .update(normalized, "utf8")
+    .digest("hex");
+
+  return {
+    wallet: candidate.wallet,
+    score,
+    candidateHash,
+    eligible: score >= minScore,
+    reason: score >= minScore ? "minimum_score_reached" : "minimum_score_not_reached",
+  };
+}
+
+export function selectWinners(
+  decisions: Decision[],
+  winnerCount: number,
+  campaignSeed: string
+): Decision[] {
+  if (!Number.isInteger(winnerCount) || winnerCount < 1) {
+    throw new Error("Invalid winner count");
+  }
+
+  return decisions
+    .filter((x) => x.eligible)
+    .sort((a, b) => {
+      const ha = createHash("sha256")
+        .update(`${campaignSeed}:${a.candidateHash}`)
+        .digest("hex");
+      const hb = createHash("sha256")
+        .update(`${campaignSeed}:${b.candidateHash}`)
+        .digest("hex");
+
+      if (a.score !== b.score) return b.score - a.score;
+      return ha.localeCompare(hb);
+    })
+    .slice(0, winnerCount);
+}

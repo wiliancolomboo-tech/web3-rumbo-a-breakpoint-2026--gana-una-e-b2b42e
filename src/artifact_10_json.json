@@ -1,0 +1,8 @@
+{
+  "status": "healthy",
+  "protocol": "rumbo_breakpoint",
+  "oracle_pubkey": "7Xz...Qe2",
+  "cluster": "devnet",
+  "block_height": 298410291,
+  "resend_status": "connected"
+}

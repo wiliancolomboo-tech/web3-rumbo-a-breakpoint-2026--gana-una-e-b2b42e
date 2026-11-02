@@ -1,0 +1,5 @@
+SOLANA_RPC_URL=https://api.devnet.solana.com
+RUMBO_PROGRAM_ID=RumbokZ9uXoUuG5m6dF3R8EwA1yq4PqB6vT2QJz9Gxp
+RESEND_API_KEY=re_1234567890abcdef
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/token
+ADMIN_PRIVATE_KEY=[1,2,3...255]

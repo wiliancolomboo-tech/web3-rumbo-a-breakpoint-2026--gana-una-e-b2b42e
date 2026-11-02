@@ -1,0 +1,8 @@
+{
+  "status": "healthy",
+  "service": "rumbo-escrow-daemon",
+  "season": 2026,
+  "connected_rpc": "https://api.devnet.solana.com",
+  "active_subscriptions": 1,
+  "uptime_seconds": 84120
+}

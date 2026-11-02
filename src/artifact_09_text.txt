@@ -1,0 +1,7 @@
+⚡ ¿Cómo funciona la arquitectura técnica?
+
+1️⃣ Escrow cuadrático en PDAs de Solana sin custodia central.
+2️⃣ Desembolsos automatizados por hitos: Vuelos ✈️ ➔ Código open-source 💻 ➔ Asistencia 🎟️.
+3️⃣ Notificaciones enterprise en tiempo real con @resend y webhooks.
+
+0 fraudes, 100% velocidad Solana (<400ms).

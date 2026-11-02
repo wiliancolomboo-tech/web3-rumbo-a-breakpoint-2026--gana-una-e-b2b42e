@@ -1,0 +1,19 @@
++----------------------------------------------------------------------------------------------------+
+|                                    ENTERPRISE INTEGRATION TOPOLOGY                                 |
++----------------------------------------------------------------------------------------------------+
+|                                                                                                    |
+|  [Solana RPC Cluster (Helius/Triton)]                                                              |
+|        │                                                                                           |
+|        ├── WebSocket Subscription (Program Logs & Account Changes)                                 |
+|        ▼                                                                                           |
+|  [Rumbo Orchestration Daemon (Node.js/TypeScript Engine)]                                          |
+|        │                                                                                           |
+|        ├── Rate-Limited Queue Controller (P-Queue)                                                 |
+|        │                                                                                           |
+|        ├──► [Resend API Gateway (v3)] ────────► Enterprise HTML Email (Breakpoint Pass + PDF)      |
+|        │                                                                                           |
+|        ├──► [Discord/Slack Webhooks] ─────────► Multi-Sig Committee Real-Time Alert Channel        |
+|        │                                                                                           |
+|        └──► [Prometheus /metrics]    ─────────► Grafana Observability Dashboard                    |
+|                                                                                                    |
++----------------------------------------------------------------------------------------------------+

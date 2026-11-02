@@ -1,0 +1,8 @@
+💡 ¿Cómo funciona el Smart Contract de @SuperteamLATAM?
+
+1️⃣ Bóveda PDA de custodia temporal (USDC).
+2️⃣ Tranche 1 (50%): Liberado automáticamente al validar el PNR del vuelo.
+3️⃣ Tranche 2 (50%): Liberado on-site en Breakpoint mediante firma Ed25519.
+4️⃣ Integrado con @resend para notificaciones automáticas y webhooks a Slack.
+
+0% capital perdido. 100% de confianza. ⚡

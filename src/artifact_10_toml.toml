@@ -1,0 +1,23 @@
+[toolchain]
+anchor_version = "0.30.1"
+solana_version = "1.18.22"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+rumbo_core = "Rumb020261111111111111111111111111111111111"
+
+[programs.devnet]
+rumbo_core = "Rumb020261111111111111111111111111111111111"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "./keys/admin.json"
+
+[scripts]
+test = "yarn run mocha -t 1000000 tests/"

@@ -1,0 +1,9 @@
+# Solana Network Configuration
+SOLANA_RPC_URL="https://api.devnet.solana.com"
+PROGRAM_ID="RumbopALs2Kx9jM7T2y8G2D2pXfX3QzD8q7A6YJ5G5B"
+CURATOR_KEYPAIR_PATH="./curator-keypair.json"
+
+# Enterprise Communication Integrations
+RESEND_API_KEY="re_123456789abcdef"
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1234567890/token"
+PORT=8080

@@ -1,0 +1,10 @@
++-------------------------------------------------------------------------------------------------------+
+|                                    OPERATIONAL INCIDENT PLAYBOOK                                      |
++-------------------------------------------------------------------------------------------------------+
+| Event                         | Root Cause                          | Automated Remediation Action    |
++-------------------------------+-------------------------------------+---------------------------------+
+| Healthcheck Fail (/health)    | Solana RPC Rate Limiting (429)      | Auto-fallback to backup RPC endpoint|
+| Unprocessed Application       | Insufficient Vault Liquidity        | Emits high-priority Discord alert|
+| Email Relay Timeout           | Resend API Outage / Invalid API Key | Retries 5x with exponential backoff|
+| Unauthorized Pool Access      | Non-admin signer key                | Instruction reverts on-chain    |
++-------------------------------------------------------------------------------------------------------+

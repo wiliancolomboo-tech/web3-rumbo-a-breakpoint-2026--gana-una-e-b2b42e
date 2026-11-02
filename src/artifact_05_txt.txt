@@ -1,0 +1,6 @@
+/client/
+├── package.json
+├── tsconfig.json
+├── src/
+│   ├── worker.ts
+│   └── idl.json

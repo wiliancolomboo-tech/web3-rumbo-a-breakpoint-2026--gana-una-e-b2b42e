@@ -1,0 +1,39 @@
+export async function sendWinnerEmail(input: {
+  email: string;
+  wallet: string;
+  txSignature: string;
+}) {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+
+  if (!key || !from) throw new Error("Email integration is not configured");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [input.email],
+      subject: "Has sido seleccionado para Rumbo a Breakpoint 2026",
+      html: `
+        <h1>¡Enhorabuena!</h1>
+        <p>Tu wallet ${input.wallet} ha sido seleccionada.</p>
+        <p>Prueba pública: 
+          <a href="https://explorer.solana.com/tx/${input.txSignature}?cluster=devnet">
+            Ver transacción
+          </a>
+        </p>
+        <p>El equipo de Rumbo te contactará con los siguientes pasos.</p>
+      `,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Resend error: ${response.status} ${await response.text()}`);
+  }
+
+  return response.json();
+}

@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  rumbo-oracle-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rumbo_oracle_worker
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - PROGRAM_ID=RumbocgN3c5i9Kq1bPnqTjH7u9pB4m2YkYhK7P8hK8k8
+      - ORACLE_KEYPAIR_PATH=/app/keys/oracle-keypair.json
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_id/your_webhook_token
+      - RESEND_API_KEY=re_123456789_abcdefg
+      - SENDER_EMAIL=grants@rumbo-breakpoint.com
+    volumes:
+      - ./keys:/app/keys:ro
+    ports:
+      - "8080:8080"

@@ -1,0 +1,9 @@
+# Solana Configuration
+SOLANA_RPC_URL=https://api.devnet.solana.com
+PROGRAM_ID=Rumb011111111111111111111111111111111111111
+ANCHOR_WALLET=./id.json
+
+# Enterprise Integrations
+RESEND_API_KEY=re_9a8b7c6d5e4f3a2b1c0d_sample
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1234567890/abcdefghijklmnopqrstuvwxyz
+TEST_NOTIFICATION_EMAIL=fellowships@solanaspain.org

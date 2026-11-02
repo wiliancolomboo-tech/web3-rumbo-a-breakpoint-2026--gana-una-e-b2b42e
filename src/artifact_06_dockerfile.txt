@@ -1,0 +1,25 @@
+FROM node:20-bullseye-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json tsconfig.json ./
+RUN npm install
+
+COPY services/ ./services/
+COPY idl/ ./idl/
+
+RUN npm run build
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+CMD ["node", "dist/services/oracle-agent/src/rumbo-agent.js"]

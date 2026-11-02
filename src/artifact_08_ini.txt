@@ -1,0 +1,8 @@
+# Solana Network Configuration
+SOLANA_RPC_URL="https://api.devnet.solana.com"
+ORACLE_PRIVATE_KEY="[12,34,56,...]"
+
+# Enterprise Delivery API Keys
+RESEND_API_KEY="re_live_xxxxxxxxxxxxxxxx"
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/xxxx/yyyy"
+PORT=8080

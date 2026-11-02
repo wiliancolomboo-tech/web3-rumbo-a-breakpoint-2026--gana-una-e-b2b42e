@@ -1,0 +1,19 @@
+FROM node:20-slim AS runner
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl build-essential git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+ENV NODE_ENV=production
+RUN npm run build || true
+
+EXPOSE 8080
+
+CMD ["npx", "ts-node", "orchestrator/src/agent.ts"]

@@ -1,0 +1,15 @@
+1/3 🚀 ¡El camino a @Solana Breakpoint 2026 ahora es 100% on-chain, auditable y descentralizado!
+
+Presentamos "CaminoBreakpoint": el protocolo Anchor que automatiza la entrega de subvenciones de viaje y entradas oficiales para desarrolladores. Cero formularios manuales, 100% prueba de build. 🌴⚡
+
+2/3 🛠️ ¿Cómo funciona?
+1️⃣ El builder registra su Program ID y commits de GitHub on-chain.
+2️⃣ El consejo técnico valida los hitos vía consenso multi-sig.
+3️⃣ ¡Stipend en SOL liberado de forma instantánea desde la PDA Vault + tickets vía @resend & alertas Discord en vivo! 🎟️💸
+
+3/3 🌐 ¡Construido para empoderar a la próxima ola de builders que asistirán a #Breakpoint2026! 
+Código listo para producción, tests al 100% y Docker listo para correr.
+
+Echa un vistazo a la arquitectura y código abierto: https://github.com/solana-foundation/rumbo-breakpoint-2026 🚢
+
+cc @SolanaConf @solana #SolanaDevs #SolanaBreakpoint

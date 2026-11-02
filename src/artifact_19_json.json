@@ -1,0 +1,8 @@
+{
+  "service": "rumbopass-worker",
+  "event": "claim_detected",
+  "signature": "5x...",
+  "campaign": "9v...",
+  "network": "devnet",
+  "timestamp": "2026-01-01T00:00:00Z"
+}

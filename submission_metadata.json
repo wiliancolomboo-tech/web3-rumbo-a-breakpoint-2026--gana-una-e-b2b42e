@@ -1,0 +1,71 @@
+{
+  "deliverable_id": "superteam_abf471b2b42e",
+  "opportunity_id": "st-266cbaf7-4ec3-410d-a9fe-257d1d3433ef",
+  "platform": "SuperteamEarn",
+  "title": "Rumbo a Breakpoint 2026: gana una entrada y apoyo para tu viaje",
+  "url": "https://earn.superteam.fun/listings/bounty/rumbo-a-breakpoint-2026-gana-una-entrada-y-apoyo-para-tu-viaje",
+  "budget": "5,000 USDG",
+  "prize_amount": 5000.0,
+  "ecosystem": "Solana",
+  "github_url": "https://github.com/wiliancolomboo-tech/web3-rumbo-a-breakpoint-2026--gana-una-e-b2b42e",
+  "hf_space_url": null,
+  "status": "ready_for_submission",
+  "validation_reports": [
+    {
+      "file": "artifact_01_txt.txt",
+      "language": "txt",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_02_mermaid.txt",
+      "language": "mermaid",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_03_rust.rs",
+      "language": "rust",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_04_typescript.ts",
+      "language": "typescript",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_05_typescript.ts",
+      "language": "typescript",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_06_bash.sh",
+      "language": "bash",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_07_dockerfile.txt",
+      "language": "dockerfile",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_08_yaml.yaml",
+      "language": "yaml",
+      "valid": true,
+      "error": null
+    },
+    {
+      "file": "artifact_09_typescript.ts",
+      "language": "typescript",
+      "valid": true,
+      "error": null
+    }
+  ],
+  "git_initialized": true,
+  "created_at": "2026-11-02 23:34:12"
+}

@@ -1,0 +1,18 @@
+.PHONY: all build test deploy clean
+
+all: build
+
+build:
+	anchor build
+
+test:
+	anchor test
+
+deploy:
+	anchor deploy --provider.cluster devnet
+
+docker-up:
+	docker-compose up -d --build
+
+docker-down:
+	docker-compose down

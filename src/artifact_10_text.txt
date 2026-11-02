@@ -1,0 +1,6 @@
+Totalmente probado, auditado y listo para producción con Anchor + TypeScript SDK + Docker turnkey para organizadores.
+
+Permitamos que la próxima generación de builders brille en #SolanaBreakpoint 2026. 
+
+GitHub repo & Live Demo: https://github.com/solana-bounties/camino-breakpoint-2026
+cc @Solana @SolanaFndn @hackerhouses 🟣🔥

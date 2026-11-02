@@ -1,0 +1,8 @@
+¿Cómo funciona la arquitectura técnica de @Solana?
+
+🔒 Tranches en PDA Escrows con liberación automática
+🗳️ Quórum multi-evaluador bitmask on-chain
+⚡ Integración en tiempo real con Resend API para tickets y webhooks de gobernanza
+🛡️ Clawback automático si expiran los plazos
+
+Cero riesgo. 100% transparente.

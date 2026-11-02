@@ -1,0 +1,33 @@
+flowchart TD
+    %% Actors
+    Sponsor[("🏢 Breakpoint Sponsor / Foundation")]
+    Builder[("👨‍💻 LATAM Builder / Recipient")]
+    Judge[("⚖️ Multi-Sig Jury / Evaluator")]
+    Relayer[("⚡ Rumbo Automation Engine & Indexer")]
+    ResendAPI[("✉️ Resend Email Service")]
+    DiscordWebhook[("📢 Superteam LATAM Discord/Slack")]
+
+    %% On-Chain Program Components
+    subgraph Solana Runtime ["Solana Anchor Program (rumbo_escrow)"]
+        CampaignPDA[("📦 Campaign PDA Account")]
+        VaultPDA[("💰 Vault Escrow PDA")]
+        ApplicantPDA[("👤 Applicant Registration PDA")]
+        TicketVoucherPDA[("🎟️ Soulbound Ticket Voucher PDA")]
+    end
+
+    %% State Transitions
+    Sponsor -->|"1. initialize_campaign(budget, ticket_quota)"| CampaignPDA
+    Sponsor -->|"1a. Fund Native Escrow"| VaultPDA
+    Builder -->|"2. register_applicant(metadata_hash, route)"| ApplicantPDA
+    Builder -->|"3. submit_milestone(visa_proof, repo_proof)"| ApplicantPDA
+    Judge -->|"4. attest_and_approve(score, signature)"| ApplicantPDA
+    ApplicantPDA -->|"5. claim_travel_grant()"| VaultPDA
+    VaultPDA -->|"6. Direct SOL / USDC Payout"| Builder
+    ApplicantPDA -->|"7. issue_ticket_voucher()"| TicketVoucherPDA
+
+    %% Off-chain Loop
+    ApplicantPDA -.->|"On-Chain Event: MilestoneApproved"| Relayer
+    TicketVoucherPDA -.->|"On-Chain Event: VoucherIssued"| Relayer
+    Relayer -->|"API Dispatch: Send Itinerary & Entry QR"| ResendAPI
+    Relayer -->|"Live Broadcast: Milestone Passed"| DiscordWebhook
+    ResendAPI -->|"Delivers Booking & Entry Pass"| Builder

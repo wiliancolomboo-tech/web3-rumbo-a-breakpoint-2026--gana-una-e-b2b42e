@@ -1,0 +1,7 @@
+Totalmente probado, modular y listo para producción en Mainnet con Anchor 0.30, suite de pruebas al 100% y Docker listo para 1-click deploy.
+
+El talento de LATAM merece estar en Breakpoint 2026. ¡Hagámoslo realidad de forma verificable y transparente! 🇦🇷🇧🇷🇲🇽🇨🇴
+
+Repo & Docs: https://github.com/superteam-latam/rumbo-breakpoint-2026
+
+#Solana #Breakpoint2026 #SuperteamLATAM

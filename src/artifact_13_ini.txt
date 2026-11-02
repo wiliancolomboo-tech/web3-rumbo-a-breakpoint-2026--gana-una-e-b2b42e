@@ -1,0 +1,6 @@
+SOLANA_RPC_URL=https://api.devnet.solana.com
+PROGRAM_ID=RumbobReakpoint2026GrantProtoco1111111111111
+JURY_KEYPAIR_PATH=/app/keys/jury-keypair.json
+RESEND_API_KEY=re_live_enterprise_secret_key
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz
+PORT=8080

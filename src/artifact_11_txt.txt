@@ -1,0 +1,8 @@
++---------------------------------------------------------------------------------------+
+| OPERATIONAL PROCEDURE                 | COMMAND / ACTION                              |
++---------------------------------------------------------------------------------------+
+| Check Node Telemetry Health           | docker logs -f breakpoint_pass_orchestrator   |
+| Emergency Escrow Clawback             | ts-node scripts/emergency-clawback.ts         |
+| Rotate Resend API Key                 | Edit .env -> docker-compose up -d --no-deps   |
+| Upgrade Solana RPC Provider           | Point SOLANA_RPC_URL to private Helius/Triton |
++---------------------------------------------------------------------------------------+

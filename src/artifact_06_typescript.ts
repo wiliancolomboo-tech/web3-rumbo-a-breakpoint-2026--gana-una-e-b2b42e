@@ -1,250 +1,301 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { RumboBreakpoint } from "../target/types/rumbo_breakpoint";
 import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+} from "@solana/web3.js";
+import {
+  TOKEN_PROGRAM_ID,
   createMint,
   createAccount,
   mintTo,
   getAccount,
-  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { expect } from "chai";
-import crypto from "crypto";
 
-describe("rumbo_breakpoint e2e test suite", () => {
+describe("rumbo_breakpoint test suite", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.RumboBreakpoint as Program<any>;
+  const program = anchor.workspace.RumboBreakpoint as Program<RumboBreakpoint>;
 
-  const authority = (provider.wallet as anchor.Wallet).payer;
-  const builder = Keypair.generate();
-  const cohortId = "BP2026-LATAM-ROUND-1";
+  const admin = (provider.wallet as any).payer as Keypair;
+  const jury1 = Keypair.generate();
+  const jury2 = Keypair.generate();
+  const candidate = Keypair.generate();
+  const maliciousActor = Keypair.generate();
 
-  let vaultMint: PublicKey;
-  let authorityTokenAccount: PublicKey;
-  let builderTokenAccount: PublicKey;
-  let cohortPda: PublicKey;
-  let cohortBump: number;
-  let vaultAccountPda: PublicKey;
-  let applicationPda: PublicKey;
+  let mint: PublicKey;
+  let vaultPda: PublicKey;
+  let campaignPda: PublicKey;
+  let applicantPda: PublicKey;
+  let candidateTokenAccount: PublicKey;
+  let adminTokenAccount: PublicKey;
 
-  const maxStipend = new anchor.BN(1_500 * 1_000_000); // 1,500 USDC
-  const fundAmount = new anchor.BN(10_000 * 1_000_000); // 10,000 USDC
-  const requestedStipend = new anchor.BN(1_500 * 1_000_000);
-  const milestoneCount = 3;
+  const campaignId = new anchor.BN(2026);
+  const grantAmount = new anchor.BN(2_000_000_000); // 2,000 USDC (6 decimals)
+  const approvalThreshold = 2;
 
   before(async () => {
-    // 1. Airdrop SOL to builder
-    const sig = await provider.connection.requestAirdrop(
-      builder.publicKey,
-      2 * anchor.web3.LAMPORTS_PER_SOL
-    );
-    await provider.connection.confirmTransaction(sig);
+    // Airdrop SOL to test actors
+    for (const actor of [jury1, jury2, candidate, maliciousActor]) {
+      const sig = await provider.connection.requestAirdrop(actor.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(sig);
+    }
 
-    // 2. Create USDC Mock Mint
-    vaultMint = await createMint(
+    // Create Mock USDC Mint
+    mint = await createMint(
       provider.connection,
-      authority,
-      authority.publicKey,
+      admin,
+      admin.publicKey,
       null,
       6
     );
 
-    // 3. Derive Cohort & Vault PDAs
-    [cohortPda, cohortBump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("cohort"), Buffer.from(cohortId)],
+    // Derive PDAs
+    [campaignPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("campaign"), campaignId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
 
-    [vaultAccountPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vault"), cohortPda.toBuffer()],
+    [vaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("campaign_vault"), campaignPda.toBuffer()],
       program.programId
     );
 
-    // 4. Create Token Accounts & Mint Supply
-    authorityTokenAccount = await createAccount(
-      provider.connection,
-      authority,
-      vaultMint,
-      authority.publicKey
-    );
-
-    builderTokenAccount = await createAccount(
-      provider.connection,
-      authority,
-      vaultMint,
-      builder.publicKey
-    );
-
-    await mintTo(
-      provider.connection,
-      authority,
-      vaultMint,
-      authorityTokenAccount,
-      authority,
-      20_000 * 1_000_000
-    );
-
-    [applicationPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("application"), cohortPda.toBuffer(), builder.publicKey.toBuffer()],
+    [applicantPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("applicant"), campaignPda.toBuffer(), candidate.publicKey.toBuffer()],
       program.programId
+    );
+
+    // Create Candidate ATA
+    candidateTokenAccount = await createAccount(
+      provider.connection,
+      candidate,
+      mint,
+      candidate.publicKey
+    );
+
+    adminTokenAccount = await createAccount(
+      provider.connection,
+      admin,
+      mint,
+      admin.publicKey
     );
   });
 
-  it("1. Initializes the Breakpoint 2026 Cohort", async () => {
-    const deadline = new anchor.BN(Math.floor(Date.now() / 1000) + 86400 * 30);
-    const ticketQuota = 10;
-
+  it("1. Initializes the Breakpoint 2026 Travel Campaign", async () => {
     await program.methods
-      .initializeCohort(cohortId, ticketQuota, maxStipend, deadline)
+      .initializeCampaign(
+        campaignId,
+        "Breakpoint 2026 Fellowship",
+        approvalThreshold,
+        grantAmount,
+        [jury1.publicKey, jury2.publicKey]
+      )
       .accounts({
-        authority: authority.publicKey,
-        cohort: cohortPda,
-        vaultMint: vaultMint,
-        vaultAccount: vaultAccountPda,
+        campaign: campaignPda,
+        vault: vaultPda,
+        tokenMint: mint,
+        admin: admin.publicKey,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
       .rpc();
 
-    const cohortData = await program.account.cohort.fetch(cohortPda);
-    expect(cohortData.cohortId).to.equal(cohortId);
-    expect(cohortData.ticketQuota).to.equal(10);
-    expect(cohortData.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+    // Fund Vault with 10,000 USDC
+    await mintTo(
+      provider.connection,
+      admin,
+      mint,
+      vaultPda,
+      admin,
+      10_000_000_000
+    );
+
+    const vaultAccount = await getAccount(provider.connection, vaultPda);
+    expect(Number(vaultAccount.amount)).to.equal(10_000_000_000);
+
+    const campaignState = await program.account.campaignState.fetch(campaignPda);
+    expect(campaignState.name).to.equal("Breakpoint 2026 Fellowship");
+    expect(campaignState.approvalThreshold).to.equal(2);
+    expect(campaignState.committee.length).to.equal(2);
   });
 
-  it("2. Funds the Cohort PDA Escrow with 10,000 USDC", async () => {
-    await program.methods
-      .fundCohort(fundAmount)
-      .accounts({
-        funder: authority.publicKey,
-        cohort: cohortPda,
-        funderTokenAccount: authorityTokenAccount,
-        vaultAccount: vaultAccountPda,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .rpc();
-
-    const vaultBalance = await getAccount(provider.connection, vaultAccountPda);
-    expect(Number(vaultBalance.amount)).to.equal(fundAmount.toNumber());
-  });
-
-  it("3. Builder submits travel grant proposal with 3 milestones", async () => {
-    const proposalHash = Array.from(crypto.createHash("sha256").update("Solana Pay POS Mobile").digest());
+  it("2. Registers an applicant with Proposal IPFS CID", async () => {
+    const mockCid = "QmZtmD2qt8fJv32FNGoSD6zhMDPL6WWAqpmdJLRjh39asf";
 
     await program.methods
-      .submitApplication(proposalHash, requestedStipend, milestoneCount)
+      .registerApplicant(campaignId, mockCid)
       .accounts({
-        builder: builder.publicKey,
-        cohort: cohortPda,
-        application: applicationPda,
+        campaign: campaignPda,
+        applicantRecord: applicantPda,
+        applicant: candidate.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .signers([builder])
+      .signers([candidate])
       .rpc();
 
-    const appData = await program.account.application.fetch(applicationPda);
-    expect(appData.builder.toBase58()).to.equal(builder.publicKey.toBase58());
-    expect(appData.milestonesCount).to.equal(3);
-    expect(appData.status).to.deep.equal({ submitted: {} });
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.applicant.toBase58()).to.equal(candidate.publicKey.toBase58());
+    expect(record.metadataCid).to.equal(mockCid);
+    expect(record.approvalsCount).to.equal(0);
+    expect(record.isApproved).to.be.false;
   });
 
-  it("4. Foundation reviews and approves application & awards ticket voucher", async () => {
-    await program.methods
-      .reviewApplication(true)
-      .accounts({
-        authority: authority.publicKey,
-        cohort: cohortPda,
-        application: applicationPda,
-      })
-      .rpc();
-
-    const appData = await program.account.application.fetch(applicationPda);
-    expect(appData.status).to.deep.equal({ approved: {} });
-    expect(appData.ticketAwarded).to.be.true;
-
-    const cohortData = await program.account.cohort.fetch(cohortPda);
-    expect(cohortData.ticketsAwarded).to.equal(1);
-    expect(cohortData.totalFundsAllocated.toNumber()).to.equal(requestedStipend.toNumber());
-  });
-
-  it("5. Builder submits milestone #1 proof", async () => {
-    const proofHash = Array.from(crypto.createHash("sha256").update("github.com/pr/1").digest());
-
-    await program.methods
-      .submitMilestoneProof(proofHash)
-      .accounts({
-        builder: builder.publicKey,
-        application: applicationPda,
-      })
-      .signers([builder])
-      .rpc();
-
-    const appData = await program.account.application.fetch(applicationPda);
-    expect(appData.currentMilestone).to.equal(1);
-    expect(appData.milestonesCompleted).to.equal(0);
-  });
-
-  it("6. Reviewer verifies and releases 1st tranche (500 USDC)", async () => {
-    const initialBalance = await getAccount(provider.connection, builderTokenAccount);
-
-    await program.methods
-      .releaseMilestoneStipend()
-      .accounts({
-        reviewer: authority.publicKey,
-        cohort: cohortPda,
-        application: applicationPda,
-        grantee: builder.publicKey,
-        granteeTokenAccount: builderTokenAccount,
-        vaultAccount: vaultAccountPda,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .rpc();
-
-    const finalBalance = await getAccount(provider.connection, builderTokenAccount);
-    const diff = Number(finalBalance.amount) - Number(initialBalance.amount);
-    expect(diff).to.equal(500 * 1_000_000); // 1,500 / 3 = 500 USDC
-
-    const appData = await program.account.application.fetch(applicationPda);
-    expect(appData.milestonesCompleted).to.equal(1);
-  });
-
-  it("7. Fails when builder tries to claim next tranche before submitting proof", async () => {
+  it("3. Blocks premature claims before approval", async () => {
     try {
       await program.methods
-        .releaseMilestoneStipend()
+        .claimMilestone1(campaignId)
         .accounts({
-          reviewer: authority.publicKey,
-          cohort: cohortPda,
-          application: applicationPda,
-          grantee: builder.publicKey,
-          granteeTokenAccount: builderTokenAccount,
-          vaultAccount: vaultAccountPda,
+          campaign: campaignPda,
+          applicantRecord: applicantPda,
+          vault: vaultPda,
+          applicantTokenAccount: candidateTokenAccount,
+          applicant: candidate.publicKey,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
+        .signers([candidate])
         .rpc();
-      expect.fail("Should have thrown NoMilestonePendingRelease");
+      expect.fail("Should have thrown NotApproved error");
     } catch (err: any) {
-      expect(err.error.errorCode.code).to.equal("NoMilestonePendingRelease");
+      expect(err.error.errorCode.code).to.equal("NotApproved");
     }
   });
 
-  it("8. Fails when unauthorized caller attempts to review application", async () => {
-    const impostor = Keypair.generate();
+  it("4. Committee casts votes to reach consensus", async () => {
+    // Jury 1 votes
+    await program.methods
+      .voteApplicant(campaignId)
+      .accounts({
+        campaign: campaignPda,
+        applicantRecord: applicantPda,
+        committeeMember: jury1.publicKey,
+      })
+      .signers([jury1])
+      .rpc();
+
+    let record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.approvalsCount).to.equal(1);
+    expect(record.isApproved).to.be.false;
+
+    // Jury 2 votes (reaches threshold of 2)
+    await program.methods
+      .voteApplicant(campaignId)
+      .accounts({
+        campaign: campaignPda,
+        applicantRecord: applicantPda,
+        committeeMember: jury2.publicKey,
+      })
+      .signers([jury2])
+      .rpc();
+
+    record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.approvalsCount).to.equal(2);
+    expect(record.isApproved).to.be.true;
+  });
+
+  it("5. Prevents double-voting by same jury member", async () => {
     try {
       await program.methods
-        .reviewApplication(false)
+        .voteApplicant(campaignId)
         .accounts({
-          authority: impostor.publicKey,
-          cohort: cohortPda,
-          application: applicationPda,
+          campaign: campaignPda,
+          applicantRecord: applicantPda,
+          committeeMember: jury1.publicKey,
         })
-        .signers([impostor])
+        .signers([jury1])
         .rpc();
-      expect.fail("Should have failed with unauthorized error");
+      expect.fail("Should have prevented double vote");
     } catch (err: any) {
+      expect(err.error.errorCode.code).to.equal("AlreadyVoted");
+    }
+  });
+
+  it("6. Candidate claims Milestone 1 (50% travel reimbursement)", async () => {
+    await program.methods
+      .claimMilestone1(campaignId)
+      .accounts({
+        campaign: campaignPda,
+        applicantRecord: applicantPda,
+        vault: vaultPda,
+        applicantTokenAccount: candidateTokenAccount,
+        applicant: candidate.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([candidate])
+      .rpc();
+
+    const candidateBalance = await getAccount(provider.connection, candidateTokenAccount);
+    // 50% of 2,000 USDC = 1,000 USDC
+    expect(Number(candidateBalance.amount)).to.equal(1_000_000_000);
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.milestone1Claimed).to.be.true;
+  });
+
+  it("7. Candidate claims Milestone 2 (Remaining 50% + ticket disbursement)", async () => {
+    await program.methods
+      .claimMilestone2(campaignId)
+      .accounts({
+        campaign: campaignPda,
+        applicantRecord: applicantPda,
+        vault: vaultPda,
+        applicantTokenAccount: candidateTokenAccount,
+        applicant: candidate.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([candidate])
+      .rpc();
+
+    const candidateBalance = await getAccount(provider.connection, candidateTokenAccount);
+    // Total 2,000 USDC received
+    expect(Number(candidateBalance.amount)).to.equal(2_000_000_000);
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.milestone2Claimed).to.be.true;
+  });
+
+  it("8. Rejects replay attack on claimed milestones", async () => {
+    try {
+      await program.methods
+        .claimMilestone2(campaignId)
+        .accounts({
+          campaign: campaignPda,
+          applicantRecord: applicantPda,
+          vault: vaultPda,
+          applicantTokenAccount: candidateTokenAccount,
+          applicant: candidate.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([candidate])
+        .rpc();
+      expect.fail("Should have failed to claim duplicate milestone");
+    } catch (err: any) {
+      expect(err.error.errorCode.code).to.equal("MilestoneAlreadyClaimed");
+    }
+  });
+
+  it("9. Rejects unauthorized milestone claim from another signer", async () => {
+    try {
+      await program.methods
+        .claimMilestone1(campaignId)
+        .accounts({
+          campaign: campaignPda,
+          applicantRecord: applicantPda,
+          vault: vaultPda,
+          applicantTokenAccount: candidateTokenAccount,
+          applicant: maliciousActor.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([maliciousActor])
+        .rpc();
+      expect.fail("Should enforce account constraint check");
+    } catch (err: any) {
+      // ConstraintRaw / HasOne failure
       expect(err).to.exist;
     }
   });

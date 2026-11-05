@@ -1,8 +1,6 @@
-¿Cómo funciona Camino en @solana?
+1/4 ✈️ Rumbo a @Solana Breakpoint 2026! 
 
-1️⃣ Escrow Vault con PDAs deterministas para sponsors.
-2️⃣ Verificación criptográfica de PNR/vuelo (SHA-256) vía Oráculo.
-3️⃣ Desembolso automático: 40% al emitir boletos, 60% al hacer check-in en el venue.
-4️⃣ Notificaciones en tiempo real vía @resend + webhook de auditoría.
+Sending top builders shouldn't depend on slow reimbursements or opaque spreadsheets. 
 
-¡Cero intermediarios! ⚡
+Introducing Camino Protocol: A decentralized, milestone-escrow grant engine ensuring transparent funding and guaranteed travel support for emerging hackers! 🧵👇
+#Solana #Breakpoint2026 #Superteam

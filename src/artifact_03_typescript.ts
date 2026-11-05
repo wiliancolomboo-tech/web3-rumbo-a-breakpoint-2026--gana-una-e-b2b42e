@@ -1,160 +1,223 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program, Idl } from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import axios from "axios";
+import { Connection, PublicKey, Keypair } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Resend } from "resend";
+import axios from "axios";
 import * as dotenv from "dotenv";
 
 dotenv.config();
 
-// Configuration
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
-const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID || "RumbobXjA5Fw5yHhBqHk1Y1L2mC8oY3P4r8q6g3tB2n");
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "re_test_000000000000000000000000";
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
-const resend = new Resend(RESEND_API_KEY);
+// Ensure all enterprise env variables exist
+const RPC_ENDPOINT = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+const PROGRAM_ID = new PublicKey(
+  process.env.PROGRAM_ID || "RumbocFh9JvWkmFq9vY9qg8yV7qN5u8kL2vX4Xo1QWz"
+);
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 
-interface GrantDisbursementData {
-  applicant: string;
-  amountSol: number;
-  milestoneLevel: number;
-  proofHash: string;
-  applicantEmail: string;
-  githubHandle: string;
+if (!RESEND_API_KEY) {
+  console.warn("⚠️ RESEND_API_KEY missing! Email dispatches will be simulated.");
 }
 
-export class RumboIntegrationClient {
-  private connection: Connection;
-  private wallet: anchor.Wallet;
-  private provider: anchor.AnchorProvider;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-  constructor(keypair: Keypair) {
-    this.connection = new Connection(SOLANA_RPC_URL, {
+// Minimal IDL Definition for event listener
+const IDL: any = {
+  version: "0.1.0",
+  name: "rumbo_protocol",
+  instructions: [],
+  events: [
+    {
+      name: "FundsDisbursedEvent",
+      fields: [
+        { name: "applicant", type: "publicKey", index: false },
+        { name: "milestoneIndex", type: "u8", index: false },
+        { name: "amountDisbursed", type: "u64", index: false },
+        { name: "ticketAwarded", type: "bool", index: false },
+      ],
+    },
+    {
+      name: "MilestoneProofSubmittedEvent",
+      fields: [
+        { name: "applicant", type: "publicKey", index: false },
+        { name: "milestoneIndex", type: "u8", index: false },
+        { name: "proofHash", type: { array: ["u8", 32] }, index: false },
+      ],
+    },
+  ],
+};
+
+export class RumboEnterpriseAgent {
+  private connection: Connection;
+  private provider: AnchorProvider;
+  private program: Program;
+
+  constructor() {
+    this.connection = new Connection(RPC_ENDPOINT, {
       commitment: "confirmed",
-      wsEndpoint: SOLANA_RPC_URL.replace("https://", "wss://").replace("http://", "ws://"),
+      wsEndpoint: RPC_ENDPOINT.replace("https://", "wss://"),
     });
-    this.wallet = new anchor.Wallet(keypair);
-    this.provider = new anchor.AnchorProvider(this.connection, this.wallet, {
+
+    // Read-only ephemeral wallet for event listening
+    const dummyKey = Keypair.generate();
+    const wallet = new Wallet(dummyKey);
+    this.provider = new AnchorProvider(this.connection, wallet, {
       commitment: "confirmed",
+    });
+    this.program = new Program(IDL, PROGRAM_ID, this.provider);
+  }
+
+  public async start(): Promise<void> {
+    console.log("=====================================================");
+    console.log("🚀 Rumbo a Breakpoint 2026 Enterprise Agent Running");
+    console.log(`📍 RPC Target: ${RPC_ENDPOINT}`);
+    console.log(`📜 Monitoring Program: ${PROGRAM_ID.toBase58()}`);
+    console.log("=====================================================");
+
+    this.program.addEventListener(
+      "MilestoneProofSubmittedEvent",
+      async (event: any, slot: number, signature: string) => {
+        await this.handleMilestoneProof(event, signature);
+      }
+    );
+
+    this.program.addEventListener(
+      "FundsDisbursedEvent",
+      async (event: any, slot: number, signature: string) => {
+        await this.handleFundsDisbursed(event, signature);
+      }
+    );
+  }
+
+  private async handleMilestoneProof(event: any, signature: string): Promise<void> {
+    const applicant = event.applicant.toBase58();
+    const milestoneIdx = event.milestoneIndex;
+    const proofHex = Buffer.from(event.proofHash).toString("hex");
+
+    console.log(`\n🔔 [EVENT] New Proof Submitted for Milestone #${milestoneIdx}`);
+    console.log(`Applicant: ${applicant}`);
+    console.log(`Proof SHA: ${proofHex}`);
+
+    // Dispatch Discord Ops Alert
+    await this.notifyDiscord({
+      title: "📋 Milestone Proof Submitted - Rumbo a Breakpoint",
+      color: 0x3b82f6, // Blue
+      fields: [
+        { name: "Applicant", value: `\`${applicant}\``, inline: true },
+        { name: "Milestone", value: `#${milestoneIdx + 1}`, inline: true },
+        { name: "Proof Hash", value: `\`${proofHex.slice(0, 16)}...\``, inline: false },
+        {
+          name: "Solana Explorer",
+          value: `[View Transaction](https://explorer.solana.com/tx/${signature}?cluster=devnet)`,
+        },
+      ],
+      timestamp: new Date().toISOString(),
     });
   }
 
-  /**
-   * Dispatches an enterprise transactional notification via Resend
-   */
-  public async sendTravelGrantNotification(data: GrantDisbursementData): Promise<boolean> {
-    try {
-      console.log(`[Resend] Dispatching milestone release confirmation to ${data.applicantEmail}...`);
-      
-      const emailContent = `
-        <div style="font-family: Arial, sans-serif; background-color: #0b0e14; color: #ffffff; padding: 24px; border-radius: 8px;">
-          <h1 style="color: #14F195;">Rumbo a Breakpoint 2026: Grant Disbursed!</h1>
-          <p>Hello <strong>@${data.githubHandle}</strong>,</p>
-          <p>Congratulations! Your milestone <strong>Level ${data.milestoneLevel}</strong> has been verified by the Solana Committee.</p>
-          <div style="background-color: #1a1f2c; padding: 16px; border-left: 4px solid #9945FF; margin: 16px 0;">
-            <p><strong>Disbursed Amount:</strong> ${data.amountSol} SOL</p>
-            <p><strong>Cryptographic Proof Hash:</strong> <code>${data.proofHash}</code></p>
-            <p><strong>Recipient Wallet:</strong> <code>${data.applicant}</code></p>
-            <p><strong>Conference Access:</strong> Solana Breakpoint 2026 Ticket Confirmed</p>
-          </div>
-          <p>Pack your bags, prepare your demo, and see you at Breakpoint 2026!</p>
-          <br/>
-          <small style="color: #8c8f96;">Rumbo Breakpoint Protocol &bull; Verified on Solana Mainnet</small>
-        </div>
-      `;
+  private async handleFundsDisbursed(event: any, signature: string): Promise<void> {
+    const applicant = event.applicant.toBase58();
+    const milestoneIdx = event.milestoneIndex;
+    const amountUSDC = (Number(event.amountDisbursed) / 1_000_000).toFixed(2);
+    const ticketAwarded = event.ticketAwarded;
 
-      if (process.env.NODE_ENV === "production" && RESEND_API_KEY !== "re_test_000000000000000000000000") {
-        await resend.emails.send({
-          from: "Breakpoint Grants <grants@rumbobreakpoint.dev>",
-          to: [data.applicantEmail],
-          subject: "🎉 Grant Approved: Travel Support & Ticket for Solana Breakpoint 2026!",
-          html: emailContent,
-        });
-      } else {
-        console.log("[Resend MOCK] Real email payload successfully generated & validated.");
-      }
-      return true;
-    } catch (error) {
-      console.error("[Resend Error] Failed to send email:", error);
-      return false;
+    console.log(`\n💰 [EVENT] Funds Disbursed: $${amountUSDC} USDC to ${applicant}`);
+
+    // 1. Post to Discord Channel
+    await this.notifyDiscord({
+      title: ticketAwarded
+        ? "🎟️ BREAKPOINT 2026 TICKET & GRANT UNLOCKED!"
+        : "💸 Travel Stipend Disbursed!",
+      color: ticketAwarded ? 0x10b981 : 0xf59e0b, // Green or Amber
+      fields: [
+        { name: "Recipient", value: `\`${applicant}\``, inline: true },
+        { name: "Disbursement", value: `$${amountUSDC} USDC`, inline: true },
+        { name: "Milestone Cleared", value: `Gate ${milestoneIdx + 1}/3`, inline: true },
+        {
+          name: "Ticket Confirmed",
+          value: ticketAwarded ? "✅ Breakpoint 2026 Pass Granted" : "⏳ Pending Final Gate",
+        },
+        {
+          name: "Proof of Payment",
+          value: `[View on Explorer](https://explorer.solana.com/tx/${signature}?cluster=devnet)`,
+        },
+      ],
+      timestamp: new Date().toISOString(),
+    });
+
+    // 2. Dispatch High-Deliverability Email via Resend
+    await this.sendEmailNotification(applicant, amountUSDC, ticketAwarded, signature);
+  }
+
+  private async notifyDiscord(embed: object): Promise<void> {
+    if (!DISCORD_WEBHOOK_URL) return;
+    try {
+      await axios.post(DISCORD_WEBHOOK_URL, {
+        username: "Rumbo Breakpoint Bot",
+        avatar_url: "https://solana.com/src/img/branding/solanaLogoMark.png",
+        embeds: [embed],
+      });
+    } catch (err: any) {
+      console.error("❌ Failed to push Discord webhook:", err.message);
     }
   }
 
-  /**
-   * Broadcasts real-time audit log to Discord / Slack Webhook
-   */
-  public async broadcastAuditLog(message: string, fields: Array<{ name: string; value: string }>): Promise<void> {
-    if (!DISCORD_WEBHOOK_URL) {
-      console.log(`[Audit Webhook MOCK] ${message}`);
+  private async sendEmailNotification(
+    recipientWallet: string,
+    amountUSDC: string,
+    ticketAwarded: boolean,
+    txSignature: string
+  ): Promise<void> {
+    if (!resend) {
+      console.log(`[DRY-RUN RESEND] Simulated email to wallet contact: ${recipientWallet}`);
       return;
     }
 
-    try {
-      await axios.post(DISCORD_WEBHOOK_URL, {
-        username: "Rumbo Protocol Bot",
-        avatar_url: "https://solana.com/src/img/branding/solanaLogoMark.png",
-        embeds: [
-          {
-            title: "🌟 Rumbo a Breakpoint 2026: Escrow Disbursement",
-            description: message,
-            color: 0x14F195,
-            fields,
-            footer: {
-              text: `Solana Runtime &bull; ${new Date().toISOString()}`,
-            },
-          },
-        ],
-      });
-      console.log("[Webhook] Audit message dispatched to Foundation channel.");
-    } catch (err) {
-      console.error("[Webhook Error] Could not post to Discord/Slack:", err);
-    }
-  }
+    const recipientEmail = process.env.OPS_NOTIFICATION_EMAIL || "grants@solana.org";
 
-  /**
-   * Start listening for on-chain program events
-   */
-  public async startOrchestratorEventListener(): Promise<void> {
-    console.log(`[Orchestrator] Connecting to Solana cluster at ${SOLANA_RPC_URL}...`);
-    console.log(`[Orchestrator] Monitoring program: ${PROGRAM_ID.toBase58()}`);
+    const emailSubject = ticketAwarded
+      ? "🎉 ¡Felicidades! Tu Entrada a Breakpoint 2026 y Apoyo de Viaje están Listos"
+      : `✈️ Rumbo a Breakpoint: Pago de $${amountUSDC} USDC Liberado`;
 
-    // In an enterprise setup, we monitor program logs via WebSocket
-    this.connection.onLogs(
-      PROGRAM_ID,
-      async (logs, ctx) => {
-        if (logs.err) return;
-
-        for (const log of logs.logs) {
-          if (log.includes("MilestoneDisbursedEvent")) {
-            console.log(`[Orchestrator] Detected MilestoneDisbursedEvent in slot ${ctx.slot}!`);
-            
-            // Trigger automated downstream enterprise integrations
-            const sampleData: GrantDisbursementData = {
-              applicant: "8x9Z2...SolanaScholar",
-              amountSol: 15.0,
-              milestoneLevel: 1,
-              proofHash: "0x3fca7291048b...",
-              applicantEmail: "builder@solana.community",
-              githubHandle: "solana-dev-latam",
-            };
-
-            await this.sendTravelGrantNotification(sampleData);
-            await this.broadcastAuditLog("Travel grant disbursement confirmed on-chain.", [
-              { name: "Scholar", value: `@${sampleData.githubHandle}` },
-              { name: "Amount", value: `${sampleData.amountSol} SOL` },
-              { name: "Slot", value: ctx.slot.toString() },
-            ]);
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; background-color: #0b0e14; color: #ffffff; padding: 30px; border-radius: 10px;">
+        <h1 style="color: #14f195;">Rumbo a Breakpoint 2026</h1>
+        <p>Hola dev,</p>
+        <p>Se ha verificado tu hito satisfactoriamente y los fondos han sido liberados en Solana:</p>
+        <div style="background-color: #1b1f2b; padding: 20px; border-left: 4px solid #9945ff; margin: 20px 0;">
+          <p><strong>Monto:</strong> $${amountUSDC} USDC</p>
+          <p><strong>Billetera Receptora:</strong> ${recipientWallet}</p>
+          <p><strong>Transacción On-Chain:</strong> <a href="https://explorer.solana.com/tx/${txSignature}?cluster=devnet" style="color: #00c2ff;">Ver en Solana Explorer</a></p>
+          ${
+            ticketAwarded
+              ? '<p style="color: #14f195; font-weight: bold;">🎟️ ¡Tu entrada general a Breakpoint 2026 ha sido reservada con éxito!</p>'
+              : ""
           }
-        }
-      },
-      "confirmed"
-    );
+        </div>
+        <p>Asegúrate de reservar tus vuelos y subir tu comprobante para el siguiente desembolso.</p>
+        <br/>
+        <p style="font-size: 12px; color: #888;">Solana Latin America Developer Fellowship &bull; Breakpoint 2026</p>
+      </div>
+    `;
+
+    try {
+      await resend.emails.send({
+        from: "Rumbo a Breakpoint <onboarding@resend.dev>",
+        to: recipientEmail,
+        subject: emailSubject,
+        html: htmlContent,
+      });
+      console.log(`📧 Transactional confirmation email dispatched to ${recipientEmail}`);
+    } catch (error: any) {
+      console.error("❌ Resend error:", error.message);
+    }
   }
 }
 
-// Direct CLI Execution
+// Start daemon if executed directly
 if (require.main === module) {
-  const dummyKeypair = Keypair.generate();
-  const client = new RumboIntegrationClient(dummyKeypair);
-  client.startOrchestratorEventListener().catch(console.error);
+  const agent = new RumboEnterpriseAgent();
+  agent.start().catch((err) => {
+    console.error("Fatal agent error:", err);
+    process.exit(1);
+  });
 }

@@ -1,16 +1,39 @@
-# 1. Build & Deploy Smart Contract on Solana Devnet/Mainnet
+# -------------------------------------------------------------
+# STEP 1: Build & Deploy Anchor Smart Contract to Solana Devnet
+# -------------------------------------------------------------
+# Install Anchor CLI v0.30.1 and Solana CLI 1.18+
 anchor build
-solana program deploy target/deploy/rumbo_breakpoint.so \
-  --program-id Rumb0BrkP2o26Voyag3rProtoco1111111111111111 \
-  --url https://api.devnet.solana.com
 
-# 2. Run Comprehensive Test Suite
-anchor test --skip-local-validator
+# Generate deterministic keypair or grab program ID
+solana address -k target/deploy/camino_escrow-keypair.json
 
-# 3. Spin up the Enterprise Event Dispatcher with Docker Compose
-cp .env.example .env
-# Edit .env with your RESEND_API_KEY & DISCORD_WEBHOOK_URL
-docker compose up -d --build
+# Deploy to Devnet
+anchor deploy --provider.cluster devnet
 
-# 4. View Real-time Daemon Logs & Streamed Events
-docker compose logs -f voyager-daemon
+# -------------------------------------------------------------
+# STEP 2: Configure Environment Variables
+# -------------------------------------------------------------
+cat <<EOF > .env
+SOLANA_RPC_URL=https://api.devnet.solana.com
+PROGRAM_ID=$(solana address -k target/deploy/camino_escrow-keypair.json)
+RESEND_API_KEY=re_test_000000000000000000000000
+DISCORD_SLACK_WEBHOOK_URL=https://discord.com/api/webhooks/...
+EOF
+
+# -------------------------------------------------------------
+# STEP 3: Initialize Campaign via CLI
+# -------------------------------------------------------------
+# Initialize 2,500 USDC Stipend per builder, 10 recipients maximum
+npm run cli -- init-campaign \
+  -k ~/.config/solana/id.json \
+  -i 2026 \
+  -t "Rumbo a Breakpoint 2026" \
+  -s 2500000000 \
+  -m 10 \
+  -mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU # Devnet USDC
+
+# -------------------------------------------------------------
+# STEP 4: Launch Real-Time Monitoring Worker Daemon
+# -------------------------------------------------------------
+docker-compose up -d --build
+docker-compose logs -f camino-worker

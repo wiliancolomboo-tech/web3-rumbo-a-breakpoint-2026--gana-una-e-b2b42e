@@ -1,496 +1,557 @@
 use anchor_lang::prelude::*;
-use anchor_lang::system_program::{transfer, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("RumbobXjA5Fw5yHhBqHk1Y1L2mC8oY3P4r8q6g3tB2n");
+declare_id!("RumbocFh9JvWkmFq9vY9qg8yV7qN5u8kL2vX4Xo1QWz");
+
+pub const MAX_JURY_MEMBERS: usize = 5;
+pub const MILESTONES_COUNT: usize = 3;
+pub const DISBURSEMENT_PERCENTAGES: [u8; 3] = [30, 40, 30]; // 30% Ship Code, 40% Flight Booking, 30% On-site Check-in
 
 #[program]
-pub mod rumbo_breakpoint {
+pub mod rumbo_protocol {
     use super::*;
 
-    /// Initialize the Rumbo Breakpoint configuration and sponsor vault
-    pub fn initialize_program(
-        ctx: Context<InitializeProgram>,
-        max_grant_amount: u64,
-        total_seats: u32,
+    /// Initialize the global Grant Campaign (e.g. Rumbo a Breakpoint 2026)
+    pub fn initialize_campaign(
+        ctx: Context<InitializeCampaign>,
+        quorum_required: u8,
+        total_ticket_quota: u32,
+        jury_members: Vec<Pubkey>,
     ) -> Result<()> {
-        require!(max_grant_amount > 0, RumboError::InvalidGrantAmount);
-        require!(total_seats > 0, RumboError::InvalidSeatCount);
+        require!(
+            jury_members.len() <= MAX_JURY_MEMBERS,
+            RumboError::TooManyJuryMembers
+        );
+        require!(
+            quorum_required as usize <= jury_members.len() && quorum_required > 0,
+            RumboError::InvalidQuorum
+        );
 
-        let config = &mut ctx.accounts.config;
-        config.admin = ctx.accounts.admin.key();
-        config.vault_bump = ctx.bumps.vault;
-        config.config_bump = ctx.bumps.config;
-        config.max_grant_amount = max_grant_amount;
-        config.total_seats = total_seats;
-        config.allocated_seats = 0;
-        config.total_disbursed = 0;
-        config.is_paused = false;
+        let campaign = &mut ctx.accounts.campaign;
+        campaign.admin = ctx.accounts.admin.key();
+        campaign.vault_mint = ctx.accounts.vault_mint.key();
+        campaign.vault = ctx.accounts.vault.key();
+        campaign.quorum_required = quorum_required;
+        campaign.total_ticket_quota = total_ticket_quota;
+        campaign.allocated_tickets = 0;
+        campaign.total_funds_allocated = 0;
+        campaign.jury_members = jury_members;
+        campaign.bump = ctx.bumps.campaign;
+        campaign.vault_bump = ctx.bumps.vault;
 
-        emit!(ConfigInitializedEvent {
-            admin: config.admin,
-            max_grant_amount,
-            total_seats,
-            timestamp: Clock::get()?.unix_timestamp,
+        emit!(CampaignInitializedEvent {
+            admin: campaign.admin,
+            total_ticket_quota,
+            quorum_required,
         });
 
         Ok(())
     }
 
-    /// Builder submits a grant application for travel support and a Breakpoint ticket
-    pub fn apply_for_grant(
-        ctx: Context<ApplyForGrant>,
-        github_handle: String,
-        metadata_uri_hash: [u8; 32],
-        requested_amount: u64,
-    ) -> Result<()> {
-        let config = &ctx.accounts.config;
-        require!(!config.is_paused, RumboError::ProgramPaused);
-        require!(
-            github_handle.len() > 0 && github_handle.len() <= 64,
-            RumboError::InvalidGithubHandle
-        );
-        require!(
-            requested_amount > 0 && requested_amount <= config.max_grant_amount,
-            RumboError::GrantAmountExceeded
-        );
+    /// Deposit USDC / funding tokens into the Grant Escrow Vault
+    pub fn fund_escrow(ctx: Context<FundEscrow>, amount: u64) -> Result<()> {
+        require!(amount > 0, RumboError::InvalidAmount);
 
-        let grant = &mut ctx.accounts.grant;
-        grant.applicant = ctx.accounts.applicant.key();
-        grant.bump = ctx.bumps.grant;
-        grant.github_handle = github_handle.clone();
-        grant.metadata_uri_hash = metadata_uri_hash;
-        grant.requested_amount = requested_amount;
-        grant.disbursed_amount = 0;
-        grant.status = GrantStatus::Pending;
-        grant.milestone_level = 0;
-        grant.created_at = Clock::get()?.unix_timestamp;
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.funder_token_account.to_account_info(),
+            to: ctx.accounts.vault.to_account_info(),
+            authority: ctx.accounts.funder.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new(ctx.accounts.token_program.to_account_info(), cpi_accounts);
+        token::transfer(cpi_ctx, amount)?;
 
-        emit!(GrantAppliedEvent {
-            applicant: grant.applicant,
-            github_handle,
-            requested_amount,
-            metadata_uri_hash,
-            timestamp: grant.created_at,
+        emit!(EscrowFundedEvent {
+            funder: ctx.accounts.funder.key(),
+            amount,
         });
 
         Ok(())
     }
 
-    /// Admin / Committee reviews the application (Approve, Reject, or Revoke)
-    pub fn review_application(
-        ctx: Context<ReviewApplication>,
-        new_status: GrantStatus,
+    /// Apply for the grant with project repository / concept SHA-256 hash
+    pub fn apply_grant(
+        ctx: Context<ApplyGrant>,
+        stipend_requested: u64,
+        application_hash: [u8; 32],
     ) -> Result<()> {
-        let config = &mut ctx.accounts.config;
-        let grant = &mut ctx.accounts.grant;
+        require!(stipend_requested > 0, RumboError::InvalidAmount);
 
-        require!(grant.status == GrantStatus::Pending, RumboError::InvalidStatusTransition);
-        require!(
-            new_status == GrantStatus::Approved || new_status == GrantStatus::Rejected,
-            RumboError::InvalidStatusTransition
-        );
+        let applicant = &mut ctx.accounts.grant_application;
+        applicant.applicant = ctx.accounts.applicant.key();
+        applicant.campaign = ctx.accounts.campaign.key();
+        applicant.stipend_total = stipend_requested;
+        applicant.stipend_claimed = 0;
+        applicant.application_hash = application_hash;
+        applicant.current_milestone = 0;
+        applicant.ticket_awarded = false;
+        applicant.bump = ctx.bumps.grant_application;
 
-        if new_status == GrantStatus::Approved {
-            require!(
-                config.allocated_seats < config.total_seats,
-                RumboError::NoSeatsAvailable
-            );
-            config.allocated_seats = config.allocated_seats.checked_add(1).ok_or(RumboError::MathOverflow)?;
+        for i in 0..MILESTONES_COUNT {
+            applicant.milestones[i] = MilestoneState {
+                proof_hash: [0u8; 32],
+                approvals_count: 0,
+                approving_jurors: [Pubkey::default(); MAX_JURY_MEMBERS],
+                status: MilestoneStatus::NotStarted,
+            };
         }
 
-        grant.status = new_status;
-
-        emit!(GrantReviewedEvent {
-            applicant: grant.applicant,
-            status: grant.status,
-            reviewer: ctx.accounts.admin.key(),
-            timestamp: Clock::get()?.unix_timestamp,
+        emit!(ApplicationSubmittedEvent {
+            applicant: applicant.applicant,
+            stipend_total: stipend_requested,
+            application_hash,
         });
 
         Ok(())
     }
 
-    /// Verify a project milestone and disburse funds directly from the Vault PDA
-    pub fn verify_milestone_and_disburse(
-        ctx: Context<VerifyMilestoneAndDisburse>,
-        disbursement_amount: u64,
+    /// Submit cryptographic proof for a specific milestone (e.g. Itinerary or Code)
+    pub fn submit_milestone_proof(
+        ctx: Context<SubmitMilestoneProof>,
+        milestone_index: u8,
         proof_hash: [u8; 32],
     ) -> Result<()> {
-        let config = &mut ctx.accounts.config;
-        let grant = &mut ctx.accounts.grant;
+        let applicant = &mut ctx.accounts.grant_application;
+        let idx = milestone_index as usize;
 
-        require!(!config.is_paused, RumboError::ProgramPaused);
-        require!(grant.status == GrantStatus::Approved, RumboError::GrantNotApproved);
-        require!(disbursement_amount > 0, RumboError::InvalidDisbursementAmount);
+        require!(idx < MILESTONES_COUNT, RumboError::InvalidMilestoneIndex);
+        require!(
+            idx == applicant.current_milestone as usize,
+            RumboError::MilestoneSequenceViolation
+        );
 
-        let potential_total = grant
-            .disbursed_amount
-            .checked_add(disbursement_amount)
+        let milestone = &mut applicant.milestones[idx];
+        require!(
+            milestone.status == MilestoneStatus::NotStarted
+                || milestone.status == MilestoneStatus::Rejected,
+            RumboError::InvalidMilestoneState
+        );
+
+        milestone.proof_hash = proof_hash;
+        milestone.status = MilestoneStatus::PendingReview;
+
+        emit!(MilestoneProofSubmittedEvent {
+            applicant: applicant.applicant,
+            milestone_index,
+            proof_hash,
+        });
+
+        Ok(())
+    }
+
+    /// Evaluator / Jury member votes on milestone completion
+    pub fn vote_milestone(
+        ctx: Context<VoteMilestone>,
+        milestone_index: u8,
+        approve: bool,
+    ) -> Result<()> {
+        let campaign = &ctx.accounts.campaign;
+        let applicant = &mut ctx.accounts.grant_application;
+        let juror = ctx.accounts.juror.key();
+        let idx = milestone_index as usize;
+
+        require!(idx < MILESTONES_COUNT, RumboError::InvalidMilestoneIndex);
+        require!(
+            campaign.jury_members.contains(&juror),
+            RumboError::UnauthorizedJuror
+        );
+
+        let milestone = &mut applicant.milestones[idx];
+        require!(
+            milestone.status == MilestoneStatus::PendingReview,
+            RumboError::MilestoneNotUnderReview
+        );
+
+        // Check if juror already voted
+        for j in 0..milestone.approvals_count as usize {
+            require!(
+                milestone.approving_jurors[j] != juror,
+                RumboError::DuplicateVote
+            );
+        }
+
+        if approve {
+            milestone.approving_jurors[milestone.approvals_count as usize] = juror;
+            milestone.approvals_count += 1;
+
+            if milestone.approvals_count >= campaign.quorum_required {
+                milestone.status = MilestoneStatus::Approved;
+            }
+        } else {
+            milestone.status = MilestoneStatus::Rejected;
+        }
+
+        emit!(MilestoneVotedEvent {
+            applicant: applicant.applicant,
+            juror,
+            milestone_index,
+            approved: approve,
+            approvals_count: milestone.approvals_count,
+        });
+
+        Ok(())
+    }
+
+    /// Disburse funds to developer once milestone is approved
+    pub fn disburse_milestone_funds(
+        ctx: Context<DisburseMilestoneFunds>,
+        milestone_index: u8,
+    ) -> Result<()> {
+        let applicant = &mut ctx.accounts.grant_application;
+        let campaign = &mut ctx.accounts.campaign;
+        let idx = milestone_index as usize;
+
+        require!(idx < MILESTONES_COUNT, RumboError::InvalidMilestoneIndex);
+        require!(
+            idx == applicant.current_milestone as usize,
+            RumboError::MilestoneSequenceViolation
+        );
+
+        let milestone = &mut applicant.milestones[idx];
+        require!(
+            milestone.status == MilestoneStatus::Approved,
+            RumboError::MilestoneNotApproved
+        );
+
+        // Calculate tranche amount
+        let percentage = DISBURSEMENT_PERCENTAGES[idx] as u64;
+        let amount = applicant
+            .stipend_total
+            .checked_mul(percentage)
+            .ok_or(RumboError::MathOverflow)?
+            .checked_div(100)
             .ok_or(RumboError::MathOverflow)?;
 
-        require!(
-            potential_total <= grant.requested_amount,
-            RumboError::DisbursementCapExceeded
-        );
-
-        let vault_lamports = ctx.accounts.vault.to_account_info().lamports();
-        require!(
-            vault_lamports >= disbursement_amount,
-            RumboError::InsufficientVaultFunds
-        );
-
-        // Deduct from vault PDA using CPI with seeds
-        let admin_key = config.admin;
+        // Execute CPI transfer from PDA vault
+        let admin_key = campaign.admin;
         let seeds = &[
-            b"vault".as_ref(),
+            b"rumbo_vault".as_ref(),
             admin_key.as_ref(),
-            &[config.vault_bump],
+            &[campaign.vault_bump],
         ];
         let signer = &[&seeds[..]];
 
-        let transfer_ctx = CpiContext::new_with_signer(
-            ctx.accounts.system_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.vault.to_account_info(),
-                to: ctx.accounts.applicant.to_account_info(),
-            },
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.vault.to_account_info(),
+            to: ctx.accounts.applicant_token_account.to_account_info(),
+            authority: ctx.accounts.vault.to_account_info(),
+        };
+        let cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts,
             signer,
         );
+        token::transfer(cpi_ctx, amount)?;
 
-        transfer(transfer_ctx, disbursement_amount)?;
+        milestone.status = MilestoneStatus::Disbursed;
+        applicant.stipend_claimed = applicant
+            .stipend_claimed
+            .checked_add(amount)
+            .ok_or(RumboError::MathOverflow)?;
+        applicant.current_milestone += 1;
 
-        // Update state
-        grant.disbursed_amount = potential_total;
-        grant.milestone_level = grant.milestone_level.checked_add(1).ok_or(RumboError::MathOverflow)?;
-        
-        if grant.disbursed_amount == grant.requested_amount {
-            grant.status = GrantStatus::Completed;
+        // If all 3 milestones reached, award Breakpoint entry pass
+        if applicant.current_milestone == MILESTONES_COUNT as u8 {
+            require!(
+                campaign.allocated_tickets < campaign.total_ticket_quota,
+                RumboError::TicketsExhausted
+            );
+            campaign.allocated_tickets += 1;
+            applicant.ticket_awarded = true;
         }
 
-        config.total_disbursed = config
-            .total_disbursed
-            .checked_add(disbursement_amount)
-            .ok_or(RumboError::MathOverflow)?;
-
-        emit!(MilestoneDisbursedEvent {
-            applicant: grant.applicant,
-            amount: disbursement_amount,
-            milestone_level: grant.milestone_level,
-            proof_hash,
-            total_disbursed_to_applicant: grant.disbursed_amount,
-            status: grant.status,
-            timestamp: Clock::get()?.unix_timestamp,
+        emit!(FundsDisbursedEvent {
+            applicant: applicant.applicant,
+            milestone_index,
+            amount_disbursed: amount,
+            ticket_awarded: applicant.ticket_awarded,
         });
 
-        Ok(())
-    }
-
-    /// Admin can deposit native lamports to the escrow vault
-    pub fn fund_vault(ctx: Context<FundVault>, amount: u64) -> Result<()> {
-        require!(amount > 0, RumboError::InvalidDepositAmount);
-
-        let transfer_ctx = CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.admin.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-            },
-        );
-        transfer(transfer_ctx, amount)?;
-
-        emit!(VaultFundedEvent {
-            funder: ctx.accounts.admin.key(),
-            amount,
-            timestamp: Clock::get()?.unix_timestamp,
-        });
-
-        Ok(())
-    }
-
-    /// Admin emergency pause toggle
-    pub fn set_paused(ctx: Context<AdminOnly>, paused: bool) -> Result<()> {
-        let config = &mut ctx.accounts.config;
-        config.is_paused = paused;
         Ok(())
     }
 }
 
 // -----------------------------------------------------------------------------
-// ACCOUNT VALIDATION STRUCTS
+// ACCOUNT VALIDATION CONTEXTS
 // -----------------------------------------------------------------------------
 
 #[derive(Accounts)]
-pub fn initialize_program_accounts(
-    admin: &Signer,
-) -> bool {
-    true
-}
-
-#[derive(Accounts)]
-pub struct InitializeProgram<'info> {
+pub struct InitializeCampaign<'info> {
     #[account(
         init,
         payer = admin,
-        space = 8 + ConfigAccount::LEN,
-        seeds = [b"config", admin.key().as_ref()],
+        space = 8 + CampaignState::LEN,
+        seeds = [b"rumbo_campaign", admin.key().as_ref()],
         bump
     )]
-    pub config: Account<'info, ConfigAccount>,
+    pub campaign: Account<'info, CampaignState>,
 
-    /// CHECK: PDA acting as the fund vault; safe because seeds and bump are validated
+    pub vault_mint: Account<'info, Mint>,
+
     #[account(
-        mut,
-        seeds = [b"vault", admin.key().as_ref()],
-        bump
+        init,
+        payer = admin,
+        seeds = [b"rumbo_vault", admin.key().as_ref()],
+        bump,
+        token::mint = vault_mint,
+        token::authority = vault,
     )]
-    pub vault: SystemAccount<'info>,
+    pub vault: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub admin: Signer<'info>,
-
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
-pub struct ApplyForGrant<'info> {
+pub struct FundEscrow<'info> {
+    #[account(
+        mut,
+        seeds = [b"rumbo_campaign", campaign.admin.as_ref()],
+        bump = campaign.bump
+    )]
+    pub campaign: Account<'info, CampaignState>,
+
+    #[account(
+        mut,
+        seeds = [b"rumbo_vault", campaign.admin.as_ref()],
+        bump = campaign.vault_bump
+    )]
+    pub vault: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub funder: Signer<'info>,
+
+    #[account(
+        mut,
+        constraint = funder_token_account.mint == campaign.vault_mint,
+        constraint = funder_token_account.owner == funder.key()
+    )]
+    pub funder_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ApplyGrant<'info> {
+    #[account(
+        seeds = [b"rumbo_campaign", campaign.admin.as_ref()],
+        bump = campaign.bump
+    )]
+    pub campaign: Account<'info, CampaignState>,
+
     #[account(
         init,
         payer = applicant,
-        space = 8 + GrantAccount::LEN,
-        seeds = [b"grant", applicant.key().as_ref()],
+        space = 8 + GrantApplicationState::LEN,
+        seeds = [b"grant_applicant", campaign.key().as_ref(), applicant.key().as_ref()],
         bump
     )]
-    pub grant: Account<'info, GrantAccount>,
-
-    #[account(
-        seeds = [b"config", config.admin.as_ref()],
-        bump = config.config_bump
-    )]
-    pub config: Account<'info, ConfigAccount>,
+    pub grant_application: Account<'info, GrantApplicationState>,
 
     #[account(mut)]
     pub applicant: Signer<'info>,
-
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct ReviewApplication<'info> {
+#[instruction(milestone_index: u8)]
+pub struct SubmitMilestoneProof<'info> {
     #[account(
         mut,
-        seeds = [b"config", config.admin.as_ref()],
-        bump = config.config_bump,
-        has_one = admin @ RumboError::UnauthorizedAdmin
+        seeds = [b"grant_applicant", grant_application.campaign.as_ref(), applicant.key().as_ref()],
+        bump = grant_application.bump,
+        has_one = applicant,
     )]
-    pub config: Account<'info, ConfigAccount>,
+    pub grant_application: Account<'info, GrantApplicationState>,
 
-    #[account(
-        mut,
-        seeds = [b"grant", grant.applicant.as_ref()],
-        bump = grant.bump
-    )]
-    pub grant: Account<'info, GrantAccount>,
-
-    pub admin: Signer<'info>,
+    pub applicant: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct VerifyMilestoneAndDisburse<'info> {
+#[instruction(milestone_index: u8)]
+pub struct VoteMilestone<'info> {
+    #[account(
+        seeds = [b"rumbo_campaign", campaign.admin.as_ref()],
+        bump = campaign.bump
+    )]
+    pub campaign: Account<'info, CampaignState>,
+
     #[account(
         mut,
-        seeds = [b"config", config.admin.as_ref()],
-        bump = config.config_bump,
-        has_one = admin @ RumboError::UnauthorizedAdmin
+        seeds = [b"grant_applicant", campaign.key().as_ref(), grant_application.applicant.as_ref()],
+        bump = grant_application.bump
     )]
-    pub config: Account<'info, ConfigAccount>,
+    pub grant_application: Account<'info, GrantApplicationState>,
 
-    #[account(
-        mut,
-        seeds = [b"grant", applicant.key().as_ref()],
-        bump = grant.bump,
-        has_one = applicant @ RumboError::ApplicantMismatch
-    )]
-    pub grant: Account<'info, GrantAccount>,
-
-    /// CHECK: PDA holds travel funds; checked via seeds
-    #[account(
-        mut,
-        seeds = [b"vault", config.admin.as_ref()],
-        bump = config.vault_bump
-    )]
-    pub vault: SystemAccount<'info>,
-
-    /// CHECK: Target recipient account, verified by grant.applicant
-    #[account(mut)]
-    pub applicant: SystemAccount<'info>,
-
-    pub admin: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
+    pub juror: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct FundVault<'info> {
-    #[account(
-        seeds = [b"config", config.admin.as_ref()],
-        bump = config.config_bump,
-        has_one = admin @ RumboError::UnauthorizedAdmin
-    )]
-    pub config: Account<'info, ConfigAccount>,
-
-    /// CHECK: PDA fund vault
+#[instruction(milestone_index: u8)]
+pub struct DisburseMilestoneFunds<'info> {
     #[account(
         mut,
-        seeds = [b"vault", config.admin.as_ref()],
-        bump = config.vault_bump
+        seeds = [b"rumbo_campaign", campaign.admin.as_ref()],
+        bump = campaign.bump
     )]
-    pub vault: SystemAccount<'info>,
+    pub campaign: Account<'info, CampaignState>,
 
-    #[account(mut)]
-    pub admin: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct AdminOnly<'info> {
     #[account(
         mut,
-        seeds = [b"config", config.admin.as_ref()],
-        bump = config.config_bump,
-        has_one = admin @ RumboError::UnauthorizedAdmin
+        seeds = [b"rumbo_vault", campaign.admin.as_ref()],
+        bump = campaign.vault_bump
     )]
-    pub config: Account<'info, ConfigAccount>,
+    pub vault: Account<'info, TokenAccount>,
 
-    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"grant_applicant", campaign.key().as_ref(), grant_application.applicant.as_ref()],
+        bump = grant_application.bump,
+        has_one = campaign
+    )]
+    pub grant_application: Account<'info, GrantApplicationState>,
+
+    #[account(
+        mut,
+        constraint = applicant_token_account.owner == grant_application.applicant,
+        constraint = applicant_token_account.mint == campaign.vault_mint
+    )]
+    pub applicant_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
 }
 
 // -----------------------------------------------------------------------------
-// STATE DEFINITIONS
+// DATA STRUCTURES
 // -----------------------------------------------------------------------------
-
-#[account]
-pub struct ConfigAccount {
-    pub admin: Pubkey,         // 32
-    pub vault_bump: u8,        // 1
-    pub config_bump: u8,       // 1
-    pub max_grant_amount: u64, // 8
-    pub total_seats: u32,      // 4
-    pub allocated_seats: u32,  // 4
-    pub total_disbursed: u64,  // 8
-    pub is_paused: bool,       // 1
-}
-
-impl ConfigAccount {
-    pub const LEN: usize = 32 + 1 + 1 + 8 + 4 + 4 + 8 + 1 + 32; // padded
-}
-
-#[account]
-pub struct GrantAccount {
-    pub applicant: Pubkey,            // 32
-    pub bump: u8,                     // 1
-    pub github_handle: String,        // 4 + 64 = 68
-    pub metadata_uri_hash: [u8; 32],  // 32
-    pub requested_amount: u64,        // 8
-    pub disbursed_amount: u64,        // 8
-    pub status: GrantStatus,          // 1
-    pub milestone_level: u8,          // 1
-    pub created_at: i64,              // 8
-}
-
-impl GrantAccount {
-    pub const LEN: usize = 32 + 1 + 68 + 32 + 8 + 8 + 1 + 1 + 8 + 32;
-}
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
-pub enum GrantStatus {
-    Pending,
+pub enum MilestoneStatus {
+    NotStarted,
+    PendingReview,
     Approved,
     Rejected,
-    Completed,
+    Disbursed,
 }
 
-// -----------------------------------------------------------------------------
-// EVENTS
-// -----------------------------------------------------------------------------
-
-#[event]
-pub struct ConfigInitializedEvent {
-    pub admin: Pubkey,
-    pub max_grant_amount: u64,
-    pub total_seats: u32,
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct GrantAppliedEvent {
-    pub applicant: Pubkey,
-    pub github_handle: String,
-    pub requested_amount: u64,
-    pub metadata_uri_hash: [u8; 32],
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct GrantReviewedEvent {
-    pub applicant: Pubkey,
-    pub status: GrantStatus,
-    pub reviewer: Pubkey,
-    pub timestamp: i64,
-}
-
-#[event]
-pub struct MilestoneDisbursedEvent {
-    pub applicant: Pubkey,
-    pub amount: u64,
-    pub milestone_level: u8,
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
+pub struct MilestoneState {
     pub proof_hash: [u8; 32],
-    pub total_disbursed_to_applicant: u64,
-    pub status: GrantStatus,
-    pub timestamp: i64,
+    pub approvals_count: u8,
+    pub approving_jurors: [Pubkey; MAX_JURY_MEMBERS],
+    pub status: MilestoneStatus,
+}
+
+#[account]
+pub struct CampaignState {
+    pub admin: Pubkey,
+    pub vault_mint: Pubkey,
+    pub vault: Pubkey,
+    pub quorum_required: u8,
+    pub total_ticket_quota: u32,
+    pub allocated_tickets: u32,
+    pub total_funds_allocated: u64,
+    pub jury_members: Vec<Pubkey>,
+    pub bump: u8,
+    pub vault_bump: u8,
+}
+
+impl CampaignState {
+    pub const LEN: usize = 32 + 32 + 32 + 1 + 4 + 4 + 8 + 4 + (MAX_JURY_MEMBERS * 32) + 1 + 1;
+}
+
+#[account]
+pub struct GrantApplicationState {
+    pub applicant: Pubkey,
+    pub campaign: Pubkey,
+    pub stipend_total: u64,
+    pub stipend_claimed: u64,
+    pub application_hash: [u8; 32],
+    pub current_milestone: u8,
+    pub ticket_awarded: bool,
+    pub milestones: [MilestoneState; MILESTONES_COUNT],
+    pub bump: u8,
+}
+
+impl GrantApplicationState {
+    // 32 (pubkey) + 32 (pubkey) + 8 + 8 + 32 + 1 + 1 + (3 * (32 + 1 + (5 * 32) + 1)) + 1
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 32 + 1 + 1 + (3 * (32 + 1 + 160 + 1)) + 1;
+}
+
+// -----------------------------------------------------------------------------
+// EVENTS & ERRORS
+// -----------------------------------------------------------------------------
+
+#[event]
+pub struct CampaignInitializedEvent {
+    pub admin: Pubkey,
+    pub total_ticket_quota: u32,
+    pub quorum_required: u8,
 }
 
 #[event]
-pub struct VaultFundedEvent {
+pub struct EscrowFundedEvent {
     pub funder: Pubkey,
     pub amount: u64,
-    pub timestamp: i64,
 }
 
-// -----------------------------------------------------------------------------
-// ERROR CODES
-// -----------------------------------------------------------------------------
+#[event]
+pub struct ApplicationSubmittedEvent {
+    pub applicant: Pubkey,
+    pub stipend_total: u64,
+    pub application_hash: [u8; 32],
+}
+
+#[event]
+pub struct MilestoneProofSubmittedEvent {
+    pub applicant: Pubkey,
+    pub milestone_index: u8,
+    pub proof_hash: [u8; 32],
+}
+
+#[event]
+pub struct MilestoneVotedEvent {
+    pub applicant: Pubkey,
+    pub juror: Pubkey,
+    pub milestone_index: u8,
+    pub approved: bool,
+    pub approvals_count: u8,
+}
+
+#[event]
+pub struct FundsDisbursedEvent {
+    pub applicant: Pubkey,
+    pub milestone_index: u8,
+    pub amount_disbursed: u64,
+    pub ticket_awarded: bool,
+}
 
 #[error_code]
 pub enum RumboError {
-    #[msg("Grant amount must be greater than zero.")]
-    InvalidGrantAmount,
-    #[msg("Total travel seats must be greater than zero.")]
-    InvalidSeatCount,
-    #[msg("Program operations are currently paused by the admin.")]
-    ProgramPaused,
-    #[msg("Github handle must be non-empty and max 64 characters.")]
-    InvalidGithubHandle,
-    #[msg("Requested grant amount exceeds program maximum limit.")]
-    GrantAmountExceeded,
-    #[msg("Invalid status transition for grant.")]
-    InvalidStatusTransition,
-    #[msg("All allocated Breakpoint seats have been exhausted.")]
-    NoSeatsAvailable,
-    #[msg("Arithmetic overflow detected.")]
+    #[msg("Amount must be greater than zero.")]
+    InvalidAmount,
+    #[msg("Jury quorum must be greater than zero and less than or equal to member count.")]
+    InvalidQuorum,
+    #[msg("Cannot exceed maximum jury capacity.")]
+    TooManyJuryMembers,
+    #[msg("Milestone index out of bounds.")]
+    InvalidMilestoneIndex,
+    #[msg("Previous milestone not fully disbursed.")]
+    MilestoneSequenceViolation,
+    #[msg("Milestone is not in a valid state for this action.")]
+    InvalidMilestoneState,
+    #[msg("Caller is not an authorized jury member.")]
+    UnauthorizedJuror,
+    #[msg("Milestone is not currently awaiting review.")]
+    MilestoneNotUnderReview,
+    #[msg("Juror has already cast a vote for this milestone.")]
+    DuplicateVote,
+    #[msg("Milestone has not yet reached approval quorum.")]
+    MilestoneNotApproved,
+    #[msg("Breakpoint 2026 ticket quota has been fully exhausted.")]
+    TicketsExhausted,
+    #[msg("Math arithmetic overflow.")]
     MathOverflow,
-    #[msg("Only approved grants can receive milestone disbursements.")]
-    GrantNotApproved,
-    #[msg("Disbursement amount must be greater than zero.")]
-    InvalidDisbursementAmount,
-    #[msg("Disbursement exceeds total requested grant allocation.")]
-    DisbursementCapExceeded,
-    #[msg("Insufficient lamports in the escrow vault.")]
-    InsufficientVaultFunds,
-    #[msg("Deposit amount must be greater than zero.")]
-    InvalidDepositAmount,
-    #[msg("Signer is not authorized as the program admin.")]
-    UnauthorizedAdmin,
-    #[msg("Applicant pubkey does not match grant profile.")]
-    ApplicantMismatch,
 }

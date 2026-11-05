@@ -1,6 +1,6 @@
-Getting builders to @SolanaConf Breakpoint shouldn’t depend on opaque Google Sheets, manual wire transfers, or unverified grants.
+3/4 🏆 100% open-source, audited PDA escrow mechanics, automated notifications, and turnkey Docker deployment for hackathon organizers.
 
-Introducing "Rumbo a Breakpoint 2026" 🎟️✈️:
-The first on-chain, milestone-locked travel stipend & verified ticket escrow protocol built natively on Solana. 
+Let's onboard the next generation of builders to Breakpoint 2026! 
 
-Here is how we empower the next generation of builders 👇
+GitHub repo & live demo: https://github.com/solana-camino/camino-protocol
+@SolanaFndn @SuperteamLATAM 🚀

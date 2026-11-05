@@ -1,11 +1,11 @@
-[ Sponsor Treasury / DAO ]
-                                            |
-                                  (USDC/SOL Deposit)
-                                            v
-[ Applicant ] ---> Submit Milestones ---> [ PDA Escrow Vault ] ---> Milestone Verified ---> [ Instant Payout ]
-                         |                         ^
-                 (Flight / Ticket / Visa)          |
-                         |                         |
-                         v                         |
-                [ Rumbo Sentinel Node ] -----------+
-                (IPFS Hashing + Jury Sig)
+┌──────────────────────────────────────────────┐
+                     │          Solana Breakpoint 2026              │
+                     │       Travel Grant & Ticket Protocol         │
+                     └──────────────────────┬───────────────────────┘
+                                            │
+               ┌────────────────────────────┼────────────────────────────┐
+               ▼                            ▼                            ▼
+     [On-Chain Anchor Escrow]     [Committee Oracle Service]    [Enterprise Integrations]
+     • PDA Vaults (USDC / SOL)    • Deterministic scoring       • Resend API (Voucher PDF)
+     • Milestone-locked releases  • ed25519 Signature checks    • Discord/Slack Audit Stream
+     • Automated clawbacks        • Sybil mitigation            • Zero-Downtime Docker Runtime

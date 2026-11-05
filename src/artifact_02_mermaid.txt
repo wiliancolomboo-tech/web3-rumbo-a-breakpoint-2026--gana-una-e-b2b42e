@@ -1,34 +1,36 @@
 flowchart TD
-    subgraph ClientLayer ["1. Applicant & Sponsor Client Layer"]
-        A[Applicant Builder] -->|1. Applies & Submits Metadata| CLI[Rumbo Sentinel CLI / Web3 DApp]
-        SP[Foundation Sponsor] -->|2. Approves & Funds PDA| CLI
+    subgraph "Applicant & Community Layer"
+        User["Applicant / Builder"] -- "1. Submit Application (CID + Profile)" --> Client["Pathfinder CLI / WebApp"]
+        Jury["Breakpoint Selection Committee"] -- "3. Cast Attestation Scores" --> Client
     end
 
-    subgraph OnChainLayer ["2. Solana Core Engine (Anchor Program)"]
-        CONF[Config PDA: Authority, Quorum, Registry]
-        ESCROW[GrantEscrow PDA: Builder, Total, Status]
-        VAULT[(Vault PDA: Lamport / SPL Escrow)]
-        MSTONE[Milestone Accounts: Proof Hashes & State]
+    subgraph "Solana Runtime (On-Chain)"
+        Program["Anchor Program: rumbo_breakpoint"]
+        EscrowVault["Grant Escrow PDA Vault (USDC/SOL)"]
+        ApplicantPDA["Applicant Account PDA"]
+        CampaignPDA["Campaign State PDA"]
 
-        CLI -->|Initialize Program| CONF
-        CLI -->|Register Grant| ESCROW
-        CLI -->|Fund Grant Escrow| VAULT
-        CLI -->|Submit Milestone Proof| MSTONE
+        Client -- "Initialize Campaign & Fund Vault" --> Program
+        Program --> CampaignPDA
+        Program --> EscrowVault
+        Client -- "register_applicant(metadata_cid)" --> Program
+        Program --> ApplicantPDA
+        Client -- "vote_and_score(score, pass_flag)" --> Program
+        Program -- "Threshold reached" --> ApplicantPDA
+        Client -- "claim_milestone(proof_sig)" --> Program
+        Program -- "Disburse 50% Travel Escrow" --> EscrowVault
+        EscrowVault -- "SPL Transfer" --> User
     end
 
-    subgraph OffChainAgent ["3. Rumbo Sentinel Automation & Enterprise Worker"]
-        ORACLE[Rumbo Sentinel Daemon]
-        ORACLE -->|RPC Event Polling / WS| ESCROW
-        ORACLE -->|Cryptographic Verification| IPFS[IPFS / Arweave Receipts]
-        ORACLE -->|Threshold Jury Signature| ESCROW
-    end
+    subgraph "Enterprise Integration Off-Chain Daemon"
+        Daemon["Node.js / Rust Event Daemon"]
+        ResendAPI["Resend API Gateway"]
+        DiscordWebhook["Discord / Slack Webhook Engine"]
+        TicketService["Solana Breakpoint Ticket Issuer"]
 
-    subgraph EnterpriseNotification ["4. Enterprise Integration Layer"]
-        ORACLE -->|Disbursement Event| RESEND[Resend API: Email Confirmation]
-        ORACLE -->|Jury Alert & Audit Logs| DISCORD[Discord / Slack Webhooks]
-        RESEND -->|Transactional Delivery| A
-        DISCORD -->|Audit Feed| SP
+        Program -. "Emit MilestoneClaimed Event" .-> Daemon
+        Daemon -- "Send Ticket & Travel Confirmation" --> ResendAPI
+        ResendAPI --> UserEmail["Applicant Email Inbox"]
+        Daemon -- "Post Live Transparent Audit Log" --> DiscordWebhook
+        Daemon -- "Mint / Reserve Conference Pass" --> TicketService
     end
-
-    VAULT -.->|Disburse Lamports| A
-    ESCROW -.->|Auto Refund on Timeout| SP

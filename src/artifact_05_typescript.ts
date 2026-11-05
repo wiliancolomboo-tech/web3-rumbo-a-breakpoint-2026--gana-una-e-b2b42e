@@ -1,183 +1,243 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
-import { RumboEscrow } from "../target/types/rumbo_escrow";
-import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { expect } from "chai";
-import * as crypto from "crypto";
+import { Program, Wallet } from "@coral-xyz/anchor";
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  clusterApiUrl,
+  sendAndConfirmTransaction,
+} from "@solana/web3.js";
+import {
+  TOKEN_PROGRAM_ID,
+  getOrCreateAssociatedTokenAccount,
+  mintTo,
+  createMint,
+} from "@solana/spl-token";
+import axios from "axios";
+import { Resend } from "resend";
+import * as dotenv from "dotenv";
 
-describe("rumbo_escrow test suite", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
+dotenv.config();
 
-  const program = anchor.workspace.RumboEscrow as Program<RumboEscrow>;
+// Contract interface
+const PROGRAM_ID = new PublicKey(
+  process.env.PROGRAM_ID || "RumboeB1GKT1W417FkWsAevjPzDk36UuG2iZ1s6hZhn"
+);
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "re_test_000000000000000000000000";
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
 
-  const authority = Keypair.generate();
-  const sponsor = Keypair.generate();
-  const builder = Keypair.generate();
-  const juror1 = Keypair.generate();
-  const attacker = Keypair.generate();
+const resend = new Resend(RESEND_API_KEY);
 
-  const grantId = new anchor.BN(202601);
-  const totalAmount = new anchor.BN(4 * LAMPORTS_PER_SOL);
-  const m1 = new anchor.BN(2 * LAMPORTS_PER_SOL);
-  const m2 = new anchor.BN(1 * LAMPORTS_PER_SOL);
-  const m3 = new anchor.BN(1 * LAMPORTS_PER_SOL);
+export class BreakpointPathfinderClient {
+  public connection: Connection;
+  public wallet: Wallet;
+  public provider: anchor.AnchorProvider;
+  public program: Program;
 
-  let configPda: PublicKey;
-  let grantPda: PublicKey;
-  let vaultPda: PublicKey;
+  constructor(rpcUrl: string, keypair: Keypair) {
+    this.connection = new Connection(rpcUrl, "confirmed");
+    this.wallet = new Wallet(keypair);
+    this.provider = new anchor.AnchorProvider(this.connection, this.wallet, {
+      commitment: "confirmed",
+    });
+    // Anchor IDL reflection
+    const idl = require("../target/idl/rumbo_breakpoint.json");
+    this.program = new Program(idl, this.provider);
+  }
 
-  before(async () => {
-    // Airdrop SOL to test actors
-    for (const actor of [authority, sponsor, builder, juror1, attacker]) {
-      const sig = await provider.connection.requestAirdrop(actor.publicKey, 10 * LAMPORTS_PER_SOL);
-      await provider.connection.confirmTransaction(sig, "confirmed");
-    }
+  public getCampaignPda(campaignId: anchor.BN): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("campaign"), campaignId.toArrayLike(Buffer, "le", 8)],
+      PROGRAM_ID
+    );
+  }
 
-    [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
+  public getVaultPda(campaignPda: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("campaign_vault"), campaignPda.toBuffer()],
+      PROGRAM_ID
+    );
+  }
 
-    [grantPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("grant"), builder.publicKey.toBuffer(), grantId.toArrayLike(Buffer, "le", 8)],
-      program.programId
+  public getApplicantPda(campaignPda: PublicKey, applicant: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("applicant"), campaignPda.toBuffer(), applicant.toBuffer()],
+      PROGRAM_ID
+    );
+  }
+
+  /**
+   * Initializes a Breakpoint grant pool campaign.
+   */
+  async initializeCampaign(
+    campaignId: number,
+    name: string,
+    grantAmount: number,
+    threshold: number,
+    committeePubkeys: PublicKey[],
+    mint: PublicKey
+  ): Promise<string> {
+    const cId = new anchor.BN(campaignId);
+    const [campaignPda] = this.getCampaignPda(cId);
+    const [vaultPda] = this.getVaultPda(campaignPda);
+
+    const tx = await this.program.methods
+      .initializeCampaign(
+        cId,
+        name,
+        threshold,
+        new anchor.BN(grantAmount),
+        committeePubkeys
+      )
+      .accounts({
+        campaign: campaignPda,
+        vault: vaultPda,
+        tokenMint: mint,
+        admin: this.wallet.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      })
+      .rpc();
+
+    await this.notifyDiscord(
+      `🎉 **Nueva Campaña Creada: Rumbo a Breakpoint 2026**\n- **Nombre:** ${name}\n- **Beca por Ganador:** ${grantAmount / 1_000_000} USDC\n- **Umbral de Jurado:** ${threshold} firmas\n- **Tx:** \`${tx}\``
     );
 
-    [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from("vault"), grantPda.toBuffer()], program.programId);
-  });
+    return tx;
+  }
 
-  it("1. Initializes global protocol configuration with 1-juror quorum threshold", async () => {
-    const tx = await program.methods
-      .initialize(1, 250) // 1 juror quorum, 2.5% fee limit
+  /**
+   * Candidate applies with proposal IPFS CID.
+   */
+  async applyForGrant(campaignId: number, metadataCid: string): Promise<string> {
+    const cId = new anchor.BN(campaignId);
+    const [campaignPda] = this.getCampaignPda(cId);
+    const [applicantPda] = this.getApplicantPda(campaignPda, this.wallet.publicKey);
+
+    const tx = await this.program.methods
+      .registerApplicant(cId, metadataCid)
       .accounts({
-        config: configPda,
-        authority: authority.publicKey,
-        systemProgram: SystemProgram.programId,
+        campaign: campaignPda,
+        applicantRecord: applicantPda,
+        applicant: this.wallet.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
       })
-      .signers([authority])
       .rpc();
 
-    const configAccount = await program.account.config.fetch(configPda);
-    expect(configAccount.authority.toBase58()).to.equal(authority.publicKey.toBase58());
-    expect(configAccount.juryQuorumThreshold).to.equal(1);
-    expect(configAccount.programFeeBasisPoints).to.equal(250);
-  });
-
-  it("2. Registers a new developer travel grant with 3 discrete milestones", async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const expiry = new anchor.BN(now + 86400 * 30); // 30 days validity
-
-    await program.methods
-      .createGrant(grantId, totalAmount, [m1, m2, m3], expiry)
-      .accounts({
-        config: configPda,
-        grantEscrow: grantPda,
-        vault: vaultPda,
-        builder: builder.publicKey,
-        sponsor: sponsor.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([sponsor])
-      .rpc();
-
-    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
-    expect(grantAccount.builder.toBase58()).to.equal(builder.publicKey.toBase58());
-    expect(grantAccount.sponsor.toBase58()).to.equal(sponsor.publicKey.toBase58());
-    expect(grantAccount.totalAmount.toString()).to.equal(totalAmount.toString());
-  });
-
-  it("3. Funds the grant PDA vault with 4 SOL from sponsor", async () => {
-    await program.methods
-      .fundGrant(grantId)
-      .accounts({
-        grantEscrow: grantPda,
-        vault: vaultPda,
-        sponsor: sponsor.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([sponsor])
-      .rpc();
-
-    const vaultBalance = await provider.connection.getBalance(vaultPda);
-    expect(vaultBalance).to.equal(4 * LAMPORTS_PER_SOL);
-  });
-
-  it("4. Builder submits proof hash for Milestone 0 (Flight & Ticket Receipt)", async () => {
-    const dummyProof = crypto.createHash("sha256").update("LATAM_AIRLINES_BOOKING_REF_BKPT2026").digest();
-    const proofArray = Array.from(dummyProof);
-
-    await program.methods
-      .submitMilestoneProof(grantId, 0, proofArray)
-      .accounts({
-        grantEscrow: grantPda,
-        builder: builder.publicKey,
-      })
-      .signers([builder])
-      .rpc();
-
-    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
-    expect(grantAccount.milestoneStatus[0]).to.deep.equal({ submitted: {} });
-  });
-
-  it("5. Juror casts affirmative vote meeting the quorum requirement", async () => {
-    const [voteRecordPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vote"), grantPda.toBuffer(), Buffer.from([0]), juror1.publicKey.toBuffer()],
-      program.programId
+    await this.notifyDiscord(
+      `📝 **Nueva Aplicación Registrada**\n- **Candidato:** \`${this.wallet.publicKey.toBase58()}\`\n- **Propuesta (IPFS):** \`${metadataCid}\`\n- **Tx:** \`${tx}\``
     );
 
-    await program.methods
-      .castJuryVote(grantId, 0, true)
-      .accounts({
-        grantEscrow: grantPda,
-        voteRecord: voteRecordPda,
-        juror: juror1.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([juror1])
-      .rpc();
+    return tx;
+  }
 
-    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
-    expect(grantAccount.juryApprovals[0]).to.equal(1);
-  });
+  /**
+   * Claims milestone payout and triggers real ticket dispatch off-chain.
+   */
+  async claimMilestone(
+    campaignId: number,
+    milestoneIndex: 1 | 2,
+    applicantAta: PublicKey,
+    recipientEmail?: string
+  ): Promise<string> {
+    const cId = new anchor.BN(campaignId);
+    const [campaignPda] = this.getCampaignPda(cId);
+    const [vaultPda] = this.getVaultPda(campaignPda);
+    const [applicantPda] = this.getApplicantPda(campaignPda, this.wallet.publicKey);
 
-  it("6. Disburses Milestone 0 (2 SOL) directly to builder's wallet", async () => {
-    const builderBalanceBefore = await provider.connection.getBalance(builder.publicKey);
-
-    await program.methods
-      .disburseMilestone(grantId, 0)
-      .accounts({
-        config: configPda,
-        grantEscrow: grantPda,
-        vault: vaultPda,
-        builder: builder.publicKey,
-        caller: juror1.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([juror1])
-      .rpc();
-
-    const builderBalanceAfter = await provider.connection.getBalance(builder.publicKey);
-    expect(builderBalanceAfter - builderBalanceBefore).to.equal(2 * LAMPORTS_PER_SOL);
-
-    const vaultBalanceRemaining = await provider.connection.getBalance(vaultPda);
-    expect(vaultBalanceRemaining).to.equal(2 * LAMPORTS_PER_SOL);
-  });
-
-  it("7. Fails when an attacker attempts to disburse funds to an unauthorized address", async () => {
-    try {
-      await program.methods
-        .disburseMilestone(grantId, 1)
+    let tx: string;
+    if (milestoneIndex === 1) {
+      tx = await this.program.methods
+        .claimMilestone1(cId)
         .accounts({
-          config: configPda,
-          grantEscrow: grantPda,
+          campaign: campaignPda,
+          applicantRecord: applicantPda,
           vault: vaultPda,
-          builder: attacker.publicKey, // Fraudulent address
-          caller: attacker.publicKey,
-          systemProgram: SystemProgram.programId,
+          applicantTokenAccount: applicantAta,
+          applicant: this.wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
         })
-        .signers([attacker])
         .rpc();
-      expect.fail("Should have thrown constraint error");
-    } catch (err: any) {
-      expect(err.toString()).to.include("Error");
+    } else {
+      tx = await this.program.methods
+        .claimMilestone2(cId)
+        .accounts({
+          campaign: campaignPda,
+          applicantRecord: applicantPda,
+          vault: vaultPda,
+          applicantTokenAccount: applicantAta,
+          applicant: this.wallet.publicKey,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
     }
-  });
-});
+
+    // Enterprise notification dispatch
+    if (recipientEmail) {
+      await this.sendTicketNotification(recipientEmail, milestoneIndex, tx);
+    }
+
+    await this.notifyDiscord(
+      `✈️ **Hito ${milestoneIndex} Desembolsado con Éxito**\n- **Beneficiario:** \`${this.wallet.publicKey.toBase58()}\`\n- **Fase:** ${
+        milestoneIndex === 1 ? "50% Vuelos / Viáticos" : "50% Entrada Oficial + Check-in Presencial"
+      }\n- **Tx:** \`${tx}\``
+    );
+
+    return tx;
+  }
+
+  /**
+   * Enterprise Resend email integration.
+   */
+  public async sendTicketNotification(
+    email: string,
+    milestone: number,
+    signature: string
+  ): Promise<void> {
+    try {
+      if (!RESEND_API_KEY || RESEND_API_KEY.includes("dummy")) {
+        console.log(`[DRY-RUN] Sending Breakpoint ticket confirmation to ${email}`);
+        return;
+      }
+
+      await resend.emails.send({
+        from: "Breakpoint Pathfinder <grants@solanabreakpoint.org>",
+        to: email,
+        subject: `🎟️ ¡Confirmación Oficial: Rumbo a Breakpoint 2026 - Hito ${milestone} Aprobado!`,
+        html: `
+          <div style="font-family: Arial, sans-serif; background-color: #0b0e14; color: #fff; padding: 24px; border-radius: 8px;">
+            <h1 style="color: #14F195;">¡Felicidades, Builder!</h1>
+            <p>Tu solicitud para <strong>Rumbo a Breakpoint 2026</strong> ha superado la validación criptográfica en Solana.</p>
+            <p><strong>Hito Desembolsado:</strong> ${milestone} de 2</p>
+            <p><strong>Identificador de Transacción:</strong> <a href="https://explorer.solana.com/tx/${signature}?cluster=devnet" style="color: #9945FF;">${signature}</a></p>
+            <hr style="border: 1px solid #222;" />
+            <p>Tu entrada y voucher de viaje están asegurados en la tesorería on-chain. Nos vemos en Breakpoint 2026.</p>
+          </div>
+        `,
+      });
+      console.log(`[Resend] Email ticket confirmation sent to: ${email}`);
+    } catch (err) {
+      console.error("[Resend Error] Failed to dispatch email:", err);
+    }
+  }
+
+  /**
+   * Discord audit stream for community transparency.
+   */
+  public async notifyDiscord(content: string): Promise<void> {
+    if (!DISCORD_WEBHOOK_URL) {
+      console.log(`[Webhook Mock]: ${content}`);
+      return;
+    }
+    try {
+      await axios.post(DISCORD_WEBHOOK_URL, {
+        username: "Solana Breakpoint Pathfinder",
+        avatar_url: "https://solana.com/src/img/branding/solanaLogoMark.png",
+        content,
+      });
+    } catch (e: any) {
+      console.error("[Discord Webhook Error]:", e.message);
+    }
+  }
+}

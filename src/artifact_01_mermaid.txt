@@ -1,35 +1,25 @@
 flowchart TD
-    subgraph OnChain["Solana Blockchain (Rumbo Breakpoint Core Engine)"]
-        Admin[Sponsor / Foundation Multi-Sig]
-        Builder[Applicant / Scholar Wallet]
-        VaultPDA[("USDC / SOL Vault PDA\n['vault', config]")]
-        ConfigPDA[("Program Config PDA\n['config']")]
-        GrantPDA[("Grant Application PDA\n['grant', applicant]")]
-        
-        Admin -->|initialize_program & fund_vault| VaultPDA
-        Admin -->|initialize_program| ConfigPDA
-        Builder -->|apply_for_grant| GrantPDA
-        Admin -->|review_application| GrantPDA
-        Admin -->|verify_milestone_and_disburse| GrantPDA
-        GrantPDA -.->|release escrowed funds| VaultPDA
-        VaultPDA -->|spl_token / lamport transfer| Builder
+    subgraph Applicants & Community
+        A[Developer / Grant Applicant] -->|1. Submit Application & GitHub SHA| SC[Solana Program: RumboProtocol]
+        A -->|4. Submit Flight Itinerary SHA256| SC
+        A -->|7. Check-In at Breakpoint 2026| SC
     end
 
-    subgraph OffChain["Automation & Event-Driven Enterprise Layer"]
-        EventListener[Rumbo Automation Worker & Event Consumer]
-        RPC[Solana Dedicated RPC Node / WebSockets]
-        
-        RPC -->|Program Logs & State Transitions| EventListener
-        EventListener -->|Check Application Status| RPC
+    subgraph On-Chain Program: RumboProtocol
+        SC -->|Program PDA| ESCROW[(Program Escrow Vault)]
+        REG[(Applicant State Account)]
+        SC -->|Store Hashes & Approvals| REG
+        JURY[Jury Multisig / Quorum] -->|3. Review Milestone & Vote| SC
+        SC -->|5. Release Milestone Funds| ESCROW
+        ESCROW -->|USDC / SOL Transfer| A
+        SC -->|8. Issue Soulbound Breakpoint Ticket| A
     end
 
-    subgraph EnterpriseIntegrations["Enterprise Communication & Audit Systems"]
-        ResendAPI[Resend Email Gateway]
-        SlackWebhook[Discord / Slack Foundation Channel]
-        IPFS[Arweave / Irys Milestone Storage]
-        
-        EventListener -->|POST transactional travel grant confirmation & QR| ResendAPI
-        EventListener -->|POST operational audit trail & milestone alerts| SlackWebhook
-        Builder -->|Submit proposal & flight receipt hashes| IPFS
-        IPFS -.->|Content Identifier CID| GrantPDA
+    subgraph Enterprise Off-Chain Integration Layer
+        EVENT[Solana WebSocket / Geyser RPC Engine] -->|Stream Account Transitions| DAEMON[Rumbo Automation Daemon]
+        DAEMON -->|Parse Events & Hashes| NOTIF[Enterprise Dispatcher]
+        NOTIF -->|Transactional Email with Ticket & Itinerary| RESEND[Resend API]
+        NOTIF -->|Audit Log & Live Grant Alerts| DISCORD[Discord / Slack Webhooks]
+        RESEND -->|Delivery Notification| A
+        DISCORD -->|Grant Transparency Channel| SPONSOR[Breakpoint Committee & Sponsors]
     end

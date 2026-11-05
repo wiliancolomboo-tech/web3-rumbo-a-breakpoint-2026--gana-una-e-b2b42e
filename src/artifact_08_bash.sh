@@ -1,1 +1,1 @@
-anchor deploy --provider.cluster devnet
+docker logs -f rumbo_breakpoint_agent

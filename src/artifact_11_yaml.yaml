@@ -1,19 +1,21 @@
 version: "3.8"
 
 services:
-  rumbo-orchestrator:
+  camino-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rumbo_breakpoint_orchestrator
-    restart: always
+    container_name: camino-breakpoint-worker
+    restart: unless-stopped
     environment:
-      - SOLANA_RPC_URL=https://api.devnet.solana.com
-      - SOLANA_WS_URL=wss://api.devnet.solana.com
-      - PROGRAM_ID=RumbocR3akpoint202611111111111111111111111
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      - PROGRAM_ID=${PROGRAM_ID:-Cam1no1111111111111111111111111111111111111}
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - SENDER_EMAIL=travel@breakpoint2026.solana.org
+      - DISCORD_SLACK_WEBHOOK_URL=${DISCORD_SLACK_WEBHOOK_URL}
+      - LOG_LEVEL=info
+      - PORT=8080
+    ports:
+      - "8080:8080"
     logging:
       driver: "json-file"
       options:

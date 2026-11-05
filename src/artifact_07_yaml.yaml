@@ -1,23 +1,18 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  rumbo-orchestrator:
+  rumbo-agent:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rumbo_breakpoint_worker
+    container_name: rumbo_breakpoint_agent
     restart: always
     environment:
-      - NODE_ENV=production
-      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-      - PROGRAM_ID=RumbobXjA5Fw5yHhBqHk1Y1L2mC8oY3P4r8q6g3tB2n
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - PROGRAM_ID=RumbocFh9JvWkmFq9vY9qg8yV7qN5u8kL2vX4Xo1QWz
       - RESEND_API_KEY=${RESEND_API_KEY}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-    healthcheck:
-      test: ["CMD-SHELL", "node -e 'process.exit(0)'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - OPS_NOTIFICATION_EMAIL=breakpoint-grants@solana.org
     logging:
       driver: "json-file"
       options:

@@ -1,4 +1,4 @@
 SOLANA_RPC_URL="https://api.mainnet-beta.solana.com"
 PROGRAM_ID="RumbocM8NqU9Z58y4V6aXy7xUoX7bJp2WvE8Z3wS1abc"
-RESEND_API_KEY="re_1234567890abcdef"
+RESEND_API_KEY="mock_development_token_00000000000000"
 DISCORD_WEBHOOK_URL="https://api.example.com/webhooks/alerts/placeholder"

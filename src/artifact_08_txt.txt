@@ -1,1 +1,14 @@
-/tests/solpath.spec.ts
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               OPERATIONAL INCIDENT MATRIX                              │
+├───────────────────────┬──────────────────────────────────┬─────────────────────────────┤
+│ Symptom               │ Root Cause                       │ Resolution SOP              │
+├───────────────────────┼──────────────────────────────────┼─────────────────────────────┤
+│ Event stream drops    │ RPC WebSocket timeout            │ Worker auto-reconnects with │
+│                       │                                  │ exponential backoff (2-60s) │
+├───────────────────────┼──────────────────────────────────┼─────────────────────────────┤
+│ Finalization fails    │ Escrow vault out of USDC funds   │ Re-fund vault PDA via       │
+│                       │                                  │ SPL transfer; alert fired   │
+├───────────────────────┼──────────────────────────────────┼─────────────────────────────┤
+│ Email not sent        │ Resend rate limit or invalid API │ Queue falls back to disk;   │
+│                       │ key                              │ alerts on-call via Slack    │
+└───────────────────────┴──────────────────────────────────┴─────────────────────────────┘

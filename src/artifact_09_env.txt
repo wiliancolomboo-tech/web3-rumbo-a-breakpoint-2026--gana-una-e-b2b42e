@@ -1,5 +1,5 @@
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=RumbokZg3bB6o4kK1gBwK95Vb2e6T8kF6Z9Wc4jB9Rum
-RESEND_API_KEY=re_your_live_resend_api_key_here
-DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
-SCHOLAR_NOTIFICATION_EMAIL=scholar@solana.org
+PROGRAM_ID=RumbXXzC6DqgD5rJc9Qp3XyFvh8K1i4vL7M3bZt4w2N
+RESEND_API_KEY="mock_development_token_00000000000000"
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/XXXXX
+ADMIN_KEYPAIR_JSON=[14,242,...] # byte array of your admin keypair

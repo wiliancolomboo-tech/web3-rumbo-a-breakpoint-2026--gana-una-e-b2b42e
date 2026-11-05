@@ -1,14 +1,13 @@
-# Solana Network Configuration
-SOLANA_RPC_URL="https://api.devnet.solana.com"
-PROGRAM_ID="RumbocR3w7pXz6GkZ9BqYQxNkWp4mFvT2eU8sV1d1111"
-ANCHOR_WALLET="/root/.config/solana/id.json"
-IDL_PATH="./target/idl/rumbo_protocol.json"
+# Solana Network Credentials
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+PROGRAM_ID=Rumbok2o4D9N9V9yqXvJ2aDq7K6B9E8yF4bC3aM1wPQ
+ANCHOR_WALLET=/app/keys/sponsor-keypair.json
 
-# Enterprise Communication Rails
-RESEND_API_KEY="re_123456789_enterpriseKey"
-OPERATIONAL_EMAIL="tickets@breakpoint.solana.com"
-DISCORD_WEBHOOK_URL="https://api.example.com/webhooks/alerts/placeholder"
+# Enterprise Notification APIs
+RESEND_API_KEY="mock_development_token_00000000000000"
+NOTIFICATION_EMAIL=grants@rumbobreakpoint.xyz
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/token_abcdef
 
-# Telemetry
+# Service Monitoring
 PORT=8080
-METRICS_ENABLED=true
+METRICS_TOKEN=sec_metrics_token_99x

@@ -1,188 +1,290 @@
-import * as anchor from "@coral-xyz/anchor";
-import { Program, Idl } from "@coral-xyz/anchor";
-import { Connection, PublicKey, Keypair } from "@solana/web3.js";
-import { Resend } from "resend";
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet, Idl, BN } from "@coral-xyz/anchor";
 import axios from "axios";
-import * as dotenv from "dotenv";
 import * as crypto from "crypto";
-import fs from "fs";
 
-dotenv.config();
+// -----------------------------------------------------------------------------
+// INTERFACES & CONFIG
+// -----------------------------------------------------------------------------
 
-// Configuration & Environment Bounds
-const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
-const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID || "RumbobREAk202611111111111111111111111111111"
-);
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "re_test_key_123456789";
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
-const KEYPAIR_PATH = process.env.KEYPAIR_PATH || "./authority-keypair.json";
-
-// Initialize Enterprise Clients
-const resend = new Resend(RESEND_API_KEY);
-const connection = new Connection(RPC_URL, "confirmed");
-
-// Load Operator Authority Keypair
-let authorityKeypair: Keypair;
-if (fs.existsSync(KEYPAIR_PATH)) {
-  const secret = JSON.parse(fs.readFileSync(KEYPAIR_PATH, "utf-8"));
-  authorityKeypair = Keypair.fromSecretKey(new Uint8Array(secret));
-} else {
-  authorityKeypair = Keypair.generate();
-  fs.writeFileSync(KEYPAIR_PATH, JSON.stringify(Array.from(authorityKeypair.secretKey)));
+export interface SentinelConfig {
+  solanaRpcUrl: string;
+  programId: string;
+  resendApiKey: string;
+  discordWebhookUrl: string;
+  adminKeypair: Keypair;
 }
 
-const wallet = new anchor.Wallet(authorityKeypair);
-const provider = new anchor.AnchorProvider(connection, wallet, {
-  commitment: "confirmed",
-  preflightCommitment: "confirmed",
-});
-anchor.setProvider(provider);
+export interface GrantInitPayload {
+  grantId: number;
+  builderPubkey: string;
+  totalSol: number;
+  milestone1Sol: number; // Flight & Ticket
+  milestone2Sol: number; // Visa & Transit
+  milestone3Sol: number; // On-site Attendance & Demo
+  expiryDays: number;
+  builderEmail: string;
+}
 
-export class RumboOrchestrator {
+export class RumboSentinelEngine {
+  private connection: Connection;
+  private provider: AnchorProvider;
   private program: Program;
+  private resendApiKey: string;
+  private discordWebhookUrl: string;
 
-  constructor(idl: Idl) {
-    this.program = new Program(idl, provider);
+  constructor(config: SentinelConfig, idl: Idl) {
+    this.connection = new Connection(config.solanaRpcUrl, "confirmed");
+    const wallet = new Wallet(config.adminKeypair);
+    this.provider = new AnchorProvider(this.connection, wallet, { commitment: "confirmed" });
+    this.program = new Program(idl, config.programId, this.provider);
+    this.resendApiKey = config.resendApiKey;
+    this.discordWebhookUrl = config.discordWebhookUrl;
   }
 
-  /**
-   * Publishes critical protocol updates to Superteam LATAM channels
-   */
-  public async notifyDiscord(title: string, description: string, fields: Array<{ name: string; value: string }>) {
-    if (!DISCORD_WEBHOOK_URL) {
-      console.log(`[DISCORD DRY RUN] ${title}: ${description}`);
-      return;
-    }
+  // Derive Grant Escrow PDA
+  public findGrantPda(builder: PublicKey, grantId: BN): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("grant"), builder.toBuffer(), grantId.toArrayLike(Buffer, "le", 8)],
+      this.program.programId
+    );
+  }
+
+  // Derive Vault PDA
+  public findVaultPda(grantPda: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), grantPda.toBuffer()],
+      this.program.programId
+    );
+  }
+
+  // Calculate SHA-256 digest of travel receipts or ticket PDFs
+  public static hashReceipt(documentBuffer: Buffer): number[] {
+    const hash = crypto.createHash("sha256").update(documentBuffer).digest();
+    return Array.from(hash);
+  }
+
+  // Initialize and Fund a Rumbo Escrow
+  public async setupAndFundGrant(
+    payload: GrantInitPayload,
+    sponsorKeypair: Keypair
+  ): Promise<string> {
+    const builder = new PublicKey(payload.builderPubkey);
+    const grantIdBN = new BN(payload.grantId);
+    const [grantPda] = this.findGrantPda(builder, grantIdBN);
+    const [vaultPda] = this.findVaultPda(grantPda);
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      this.program.programId
+    );
+
+    const totalLamports = new BN(payload.totalSol * 1e9);
+    const m1 = new BN(payload.milestone1Sol * 1e9);
+    const m2 = new BN(payload.milestone2Sol * 1e9);
+    const m3 = new BN(payload.milestone3Sol * 1e9);
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const expiryTimestamp = new BN(nowSeconds + payload.expiryDays * 86400);
+
+    console.log(`[RUMBO SENTINEL] Registering Grant #${payload.grantId} for ${payload.builderPubkey}...`);
+
+    // 1. Create Grant
+    const createTx = await this.program.methods
+      .createGrant(grantIdBN, totalLamports, [m1, m2, m3], expiryTimestamp)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        builder: builder,
+        sponsor: sponsorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([sponsorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Created Grant Escrow on-chain. Tx: ${createTx}`);
+
+    // 2. Fund Grant
+    const fundTx = await this.program.methods
+      .fundGrant(grantIdBN)
+      .accounts({
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        sponsor: sponsorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([sponsorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Escrow PDA Vault funded with ${payload.totalSol} SOL. Tx: ${fundTx}`);
+
+    // 3. Dispatch Enterprise Alerts
+    await this.notifyDiscord({
+      title: "🚀 Nuevo Apoyo de Viaje Asignado: Rumbo a Breakpoint 2026",
+      color: 0x14f195, // Solana Green
+      fields: [
+        { name: "Grant ID", value: `#${payload.grantId}`, inline: true },
+        { name: "Beneficiario", value: `${payload.builderPubkey.slice(0, 6)}...${payload.builderPubkey.slice(-4)}`, inline: true },
+        { name: "Fondo Total", value: `${payload.totalSol} SOL`, inline: true },
+        { name: "Bolsa Hito 1 (Vuelos/Ticket)", value: `${payload.milestone1Sol} SOL`, inline: false },
+        { name: "Bolsa Hito 2 (Visado/Tránsito)", value: `${payload.milestone2Sol} SOL`, inline: false },
+        { name: "Bolsa Hito 3 (Breakpoint On-Site)", value: `${payload.milestone3Sol} SOL`, inline: false },
+      ],
+      txSignature: fundTx,
+    });
+
+    await this.sendEmail(
+      payload.builderEmail,
+      "¡Felicidades! Tu beca de viaje 'Rumbo a Breakpoint 2026' ha sido reservada",
+      `<p>Hola Builder,</p>
+       <p>Tu apoyo financiero para asistir a <strong>Solana Breakpoint 2026</strong> ha sido depositado en el contrato de depósito en garantía (Escrow) de Solana.</p>
+       <ul>
+         <li><strong>Monto Total:</strong> ${payload.totalSol} SOL</li>
+         <li><strong>Fondo en Custodia (Vault PDA):</strong> <code>${vaultPda.toBase58()}</code></li>
+       </ul>
+       <p>Para desbloquear tu primer 50% (${payload.milestone1Sol} SOL), ingresa a la CLI o Portal de Rumbo Sentinel y carga tu comprobante de pasaje aéreo y entrada a Breakpoint.</p>
+       <p>¡Nos vemos en Breakpoint 2026!</p>`
+    );
+
+    return fundTx;
+  }
+
+  // Verifies and triggers automatic release of milestone funds
+  public async evaluateAndDisburse(
+    grantId: number,
+    milestoneIndex: number,
+    builderPubkey: string,
+    builderEmail: string,
+    jurorKeypair: Keypair
+  ): Promise<string> {
+    const builder = new PublicKey(builderPubkey);
+    const grantIdBN = new BN(grantId);
+    const [grantPda] = this.findGrantPda(builder, grantIdBN);
+    const [vaultPda] = this.findVaultPda(grantPda);
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      this.program.programId
+    );
+
+    const [voteRecordPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("vote"),
+        grantPda.toBuffer(),
+        Buffer.from([milestoneIndex]),
+        jurorKeypair.publicKey.toBuffer(),
+      ],
+      this.program.programId
+    );
+
+    console.log(`[RUMBO SENTINEL] Casting Jury Quorum Vote for Grant #${grantId}, Milestone ${milestoneIndex}...`);
+
+    // 1. Cast Jury Vote
+    const voteTx = await this.program.methods
+      .castJuryVote(grantIdBN, milestoneIndex, true)
+      .accounts({
+        grantEscrow: grantPda,
+        voteRecord: voteRecordPda,
+        juror: jurorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([jurorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Juror vote recorded: ${voteTx}`);
+
+    // 2. Disburse Milestone Payout
+    console.log(`[RUMBO SENTINEL] Executing programmatic disbursement to builder...`);
+    const disburseTx = await this.program.methods
+      .disburseMilestone(grantIdBN, milestoneIndex)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        builder: builder,
+        caller: jurorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([jurorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Disbursement completed! Tx: ${disburseTx}`);
+
+    // 3. Dispatch Enterprise Alerts
+    await this.notifyDiscord({
+      title: `💸 Hito #${milestoneIndex + 1} Verificado & Fondos Transferidos`,
+      color: 0x9945ff, // Solana Purple
+      fields: [
+        { name: "Grant ID", value: `#${grantId}`, inline: true },
+        { name: "Hito", value: `Fase ${milestoneIndex + 1}`, inline: true },
+        { name: "Receptor", value: `${builderPubkey.slice(0, 6)}...${builderPubkey.slice(-4)}`, inline: true },
+      ],
+      txSignature: disburseTx,
+    });
+
+    await this.sendEmail(
+      builderEmail,
+      `Fondos Transferidos: Hito #${milestoneIndex + 1} Rumbo a Breakpoint 2026`,
+      `<p>Tus comprobantes han sido aprobados por el comité de selección.</p>
+       <p>Se ha transferido la porción correspondiente de tu beca de viaje directamente a tu wallet de Solana.</p>
+       <p><strong>Hash de Transacción:</strong> <a href="https://explorer.solana.com/tx/${disburseTx}?cluster=devnet">${disburseTx}</a></p>`
+    );
+
+    return disburseTx;
+  }
+
+  // Internal: Discord Webhook Integration
+  private async notifyDiscord(payload: {
+    title: string;
+    color: number;
+    fields: { name: string; value: string; inline?: boolean }[];
+    txSignature: string;
+  }): Promise<void> {
+    if (!this.discordWebhookUrl) return;
     try {
-      await axios.post(DISCORD_WEBHOOK_URL, {
+      await axios.post(this.discordWebhookUrl, {
         embeds: [
           {
-            title: `🌴 Rumbo a Breakpoint 2026: ${title}`,
-            description,
-            color: 0x14f195, // Solana Green
-            fields,
-            footer: { text: "Solana Ecosystem Travel Grants • Superteam LATAM" },
+            title: payload.title,
+            color: payload.color,
+            fields: [
+              ...payload.fields,
+              {
+                name: "Explorer",
+                value: `[Ver Transacción](https://explorer.solana.com/tx/${payload.txSignature}?cluster=devnet)`,
+              },
+            ],
+            footer: { text: "Solana Rumbo Sentinel • Breakpoint 2026 Delegation Engine" },
             timestamp: new Date().toISOString(),
           },
         ],
       });
-      console.log(`[DISCORD] Dispatched notification: ${title}`);
     } catch (err: any) {
-      console.error("[DISCORD ERROR] Failed to send webhook:", err.message);
+      console.error("[TELEMETRY WARNING] Failed to post to Discord webhook:", err.message);
     }
   }
 
-  /**
-   * Sends transactional ticket & reimbursement confirmation via Resend
-   */
-  public async sendTravelConfirmationEmail(
-    recipientEmail: string,
-    builderPubkey: string,
-    ticketNumber: number,
-    grantAmountSOL: number
-  ) {
+  // Internal: Resend Transactional Email API Integration
+  private async sendEmail(to: string, subject: string, htmlContent: string): Promise<void> {
+    if (!this.resendApiKey) return;
     try {
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; background: #000; color: #fff; padding: 30px; border-radius: 12px;">
-          <h1 style="color: #14F195;">¡Felicidades! Rumbo a Solana Breakpoint 2026 ✈️</h1>
-          <p>Tu solicitud de beca de viaje y entrada a <strong>Solana Breakpoint 2026</strong> ha sido verificada satisfactoriamente en la blockchain.</p>
-          <hr style="border: 1px solid #333;" />
-          <div style="background: #111; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>Builder Wallet:</strong> <code>${builderPubkey}</code></p>
-            <p><strong>Número de Entrada Breakpoint:</strong> #${ticketNumber}</p>
-            <p><strong>Bolsa de Viaje Liberada:</strong> ${grantAmountSOL} SOL</p>
-            <p><strong>Estado:</strong> Validado on-chain & Escrow Desbloqueado</p>
-          </div>
-          <p>Por favor revisa tu itinerario y recuerda registrarte en el stand regional al llegar al evento con tu firma de Solana Pay.</p>
-          <br />
-          <p style="color: #888;">El equipo de Superteam LATAM & Solana Foundation</p>
-        </div>
-      `;
-
-      const response = await resend.emails.send({
-        from: "Rumbo Breakpoint <grants@solanabuilders.lat>",
-        to: recipientEmail,
-        subject: `🎟️ Tu Entrada & Apoyo para Breakpoint 2026 están Confirmados (#${ticketNumber})`,
-        html: emailHtml,
-      });
-
-      console.log(`[RESEND] Sent confirmation email: ID ${response.data?.id}`);
+      await axios.post(
+        "https://api.resend.com/emails",
+        {
+          from: "Breakpoint Travel Grants <grants@solana-rumbo.dev>",
+          to: [to],
+          subject: subject,
+          html: htmlContent,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      console.log(`[RESEND EMAIL SENT] Confirmation delivered to ${to}`);
     } catch (err: any) {
-      console.error("[RESEND ERROR] Failed to dispatch email:", err.message);
+      console.error("[RESEND EMAIL ERROR] Failed to send email:", err.response?.data || err.message);
     }
   }
-
-  /**
-   * Listens to program-level events and coordinates off-chain workflows
-   */
-  public async startEventListener() {
-    console.log("⚡ Starting Rumbo Protocol Event Automation Listener...");
-
-    this.program.addEventListener("MilestoneApproved", async (event: any, _slot: number) => {
-      console.log("🎉 MilestoneApproved Event Detected:", event);
-      await this.notifyDiscord(
-        "Hito de Beca Aprobado ✅",
-        `Un participante ha superado el proceso de revisión de jurados.`,
-        [
-          { name: "Builder", value: event.builder.toBase58() },
-          { name: "Etapa Verificada", value: `Nivel ${event.approvedStage}` },
-          { name: "Puntaje Jurado", value: `${event.score}/100` },
-        ]
-      );
-    });
-
-    this.program.addEventListener("TicketVoucherIssued", async (event: any, _slot: number) => {
-      console.log("🎟️ TicketVoucherIssued Event Detected:", event);
-      const builderStr = event.builder.toBase58();
-      const ticketNum = event.ticketNumber;
-
-      // Broadcast on public channels
-      await this.notifyDiscord(
-        "¡Entrada Oficial Breakpoint 2026 Asignada! 🎟️",
-        `Un builder LATAM ha asegurado su entrada y apoyo de viaje.`,
-        [
-          { name: "Builder", value: builderStr },
-          { name: "Entrada Nro", value: `#${ticketNum}` },
-        ]
-      );
-
-      // Trigger high-deliverability Resend email
-      await this.sendTravelConfirmationEmail(
-        "builder-contact@domain.dev", // Read from off-chain applicant registry
-        builderStr,
-        ticketNum,
-        15.0 // Sol allocation per builder
-      );
-    });
-
-    this.program.addEventListener("GrantDisbursed", async (event: any, _slot: number) => {
-      console.log("💸 GrantDisbursed Event Detected:", event);
-      await this.notifyDiscord(
-        "Desembolso de Apoyo de Viaje ✈️",
-        `Fondos liberados desde el Vault PDA hacia el Builder.`,
-        [
-          { name: "Destinatario", value: event.builder.toBase58() },
-          { name: "Lamports Liberados", value: event.amount.toString() },
-          { name: "Total Reclamado", value: event.totalClaimed.toString() },
-        ]
-      );
-    });
-  }
-}
-
-// Quick CLI testing entrypoint
-if (require.main === module) {
-  const dummyIdl = {
-    version: "0.1.0",
-    name: "rumbo_protocol",
-    instructions: [],
-    events: [
-      { name: "MilestoneApproved", fields: [] },
-      { name: "TicketVoucherIssued", fields: [] },
-      { name: "GrantDisbursed", fields: [] },
-    ],
-  };
-  const agent = new RumboOrchestrator(dummyIdl as any);
-  agent.startEventListener();
 }

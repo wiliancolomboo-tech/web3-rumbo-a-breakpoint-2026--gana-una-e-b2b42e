@@ -1,23 +1,22 @@
 {
-  "name": "rumbo-agent-cli",
+  "name": "rumbo-breakpoint-worker",
   "version": "1.0.0",
-  "description": "Enterprise Agent CLI & Webhook Oracle for Rumbo Protocol",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "worker": "ts-node src/worker.ts"
+    "start": "ts-node src/index.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
-    "@solana/web3.js": "^1.95.3",
-    "axios": "^1.7.7",
-    "dotenv": "^16.4.5",
-    "resend": "^4.0.0"
+    "@solana/web3.js": "^1.95.8",
+    "@solana/spl-token": "^0.4.9",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "resend": "^4.1.1"
   },
   "devDependencies": {
-    "@types/node": "^22.5.0",
+    "@types/node": "^22.10.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.4"
+    "typescript": "^5.7.3"
   }
 }

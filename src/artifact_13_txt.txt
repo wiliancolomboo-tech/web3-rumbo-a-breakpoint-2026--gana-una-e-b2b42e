@@ -1,7 +1,6 @@
-client/
-├── package.json
-├── tsconfig.json
-├── src/
-│   ├── emailService.rs -> resendClient.ts
-│   ├── index.ts
-│   └── webhookService.ts
+Empowering builders across LATAM & worldwide to attend Breakpoint 2026 with confidence and transparent funding. 
+
+Check out the 100% open-source Anchor codebase, end-to-end tests, & Docker suite:
+🔗 https://github.com/solana-bpp/breakpoint-pass-2026
+
+¡Nos vemos en Breakpoint 2026! 🚀🟣

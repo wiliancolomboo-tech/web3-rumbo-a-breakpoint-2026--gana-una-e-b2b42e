@@ -1,33 +1,34 @@
 flowchart TD
-    %% Actors
-    Sponsor[("🏢 Breakpoint Sponsor / Foundation")]
-    Builder[("👨‍💻 LATAM Builder / Recipient")]
-    Judge[("⚖️ Multi-Sig Jury / Evaluator")]
-    Relayer[("⚡ Rumbo Automation Engine & Indexer")]
-    ResendAPI[("✉️ Resend Email Service")]
-    DiscordWebhook[("📢 Superteam LATAM Discord/Slack")]
-
-    %% On-Chain Program Components
-    subgraph Solana Runtime ["Solana Anchor Program (rumbo_escrow)"]
-        CampaignPDA[("📦 Campaign PDA Account")]
-        VaultPDA[("💰 Vault Escrow PDA")]
-        ApplicantPDA[("👤 Applicant Registration PDA")]
-        TicketVoucherPDA[("🎟️ Soulbound Ticket Voucher PDA")]
+    subgraph ClientLayer ["1. Applicant & Sponsor Client Layer"]
+        A[Applicant Builder] -->|1. Applies & Submits Metadata| CLI[Rumbo Sentinel CLI / Web3 DApp]
+        SP[Foundation Sponsor] -->|2. Approves & Funds PDA| CLI
     end
 
-    %% State Transitions
-    Sponsor -->|"1. initialize_campaign(budget, ticket_quota)"| CampaignPDA
-    Sponsor -->|"1a. Fund Native Escrow"| VaultPDA
-    Builder -->|"2. register_applicant(metadata_hash, route)"| ApplicantPDA
-    Builder -->|"3. submit_milestone(visa_proof, repo_proof)"| ApplicantPDA
-    Judge -->|"4. attest_and_approve(score, signature)"| ApplicantPDA
-    ApplicantPDA -->|"5. claim_travel_grant()"| VaultPDA
-    VaultPDA -->|"6. Direct SOL / USDC Payout"| Builder
-    ApplicantPDA -->|"7. issue_ticket_voucher()"| TicketVoucherPDA
+    subgraph OnChainLayer ["2. Solana Core Engine (Anchor Program)"]
+        CONF[Config PDA: Authority, Quorum, Registry]
+        ESCROW[GrantEscrow PDA: Builder, Total, Status]
+        VAULT[(Vault PDA: Lamport / SPL Escrow)]
+        MSTONE[Milestone Accounts: Proof Hashes & State]
 
-    %% Off-chain Loop
-    ApplicantPDA -.->|"On-Chain Event: MilestoneApproved"| Relayer
-    TicketVoucherPDA -.->|"On-Chain Event: VoucherIssued"| Relayer
-    Relayer -->|"API Dispatch: Send Itinerary & Entry QR"| ResendAPI
-    Relayer -->|"Live Broadcast: Milestone Passed"| DiscordWebhook
-    ResendAPI -->|"Delivers Booking & Entry Pass"| Builder
+        CLI -->|Initialize Program| CONF
+        CLI -->|Register Grant| ESCROW
+        CLI -->|Fund Grant Escrow| VAULT
+        CLI -->|Submit Milestone Proof| MSTONE
+    end
+
+    subgraph OffChainAgent ["3. Rumbo Sentinel Automation & Enterprise Worker"]
+        ORACLE[Rumbo Sentinel Daemon]
+        ORACLE -->|RPC Event Polling / WS| ESCROW
+        ORACLE -->|Cryptographic Verification| IPFS[IPFS / Arweave Receipts]
+        ORACLE -->|Threshold Jury Signature| ESCROW
+    end
+
+    subgraph EnterpriseNotification ["4. Enterprise Integration Layer"]
+        ORACLE -->|Disbursement Event| RESEND[Resend API: Email Confirmation]
+        ORACLE -->|Jury Alert & Audit Logs| DISCORD[Discord / Slack Webhooks]
+        RESEND -->|Transactional Delivery| A
+        DISCORD -->|Audit Feed| SP
+    end
+
+    VAULT -.->|Disburse Lamports| A
+    ESCROW -.->|Auto Refund on Timeout| SP

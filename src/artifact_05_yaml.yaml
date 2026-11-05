@@ -1,24 +1,25 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  rumbo-orchestrator:
+  flightpath-daemon:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rumbo_breakpoint_daemon
-    restart: unless-stopped
+    restart: always
     environment:
       - NODE_ENV=production
       - SOLANA_RPC_URL=https://api.devnet.solana.com
-      - PROGRAM_ID=Rumbob36j8Zp2sK3VjXF2y5yL7g9C4vJ1mDk6E8mN9Q
+      - PROGRAM_ID=Brkpt2026FlightPath111111111111111111111111111
       - RESEND_API_KEY=${RESEND_API_KEY}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - NOTIFICATION_RECIPIENT_EMAIL=${NOTIFICATION_RECIPIENT_EMAIL}
-      - SERVICE_WALLET_SECRET=${SERVICE_WALLET_SECRET}
+      - SENDER_EMAIL=travel-grants@solana-breakpoint.com
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-    ports:
-      - "8080:8080"

@@ -1,7 +1,7 @@
 SOLANA_RPC_URL=https://api.devnet.solana.com
-KEYPAIR_PATH=/app/secrets/authority.json
-PROGRAM_ID=VoyagEr1111111111111111111111111111111111111
-RESEND_API_KEY=re_123456789_enterprise_prod
-DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
-POOL_NAME=Breakpoint-2026-Superteam
+SOLANA_WS_URL=wss://api.devnet.solana.com
+PROGRAM_ID=Rumbop2611111111111111111111111111111111111
+RESEND_API_KEY="mock_development_token_00000000000000"
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcdefghijk
+SENDER_EMAIL=travel-grants@solanabreakpoint2026.com
 PORT=8080

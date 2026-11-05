@@ -1,82 +1,207 @@
-import { Resend } from "resend";
-import axios from "axios";
-import { CONFIG } from "../config";
+import * as anchor from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { RumboEscrow } from "../target/types/rumbo_escrow";
+import { PublicKey, SystemProgram, LAMPORTS_PER_SOL, Keypair } from "@solana/web3.js";
+import { assert, expect } from "chai";
 
-const resend = new Resend(CONFIG.RESEND_API_KEY);
+describe("rumbo_escrow unit & integration suite", () => {
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
 
-export interface NotificationPayload {
-  builderPubkey: string;
-  githubHandle: string;
-  score: number;
-  awardedLamports: number;
-  txSignature: string;
-  recipientEmail?: string;
-}
+  const program = anchor.workspace.RumboEscrow as Program<RumboEscrow>;
 
-export class EnterpriseNotifier {
-  public static async notifyDiscord(payload: NotificationPayload): Promise<void> {
-    if (!CONFIG.DISCORD_WEBHOOK_URL) return;
+  const councilMember = Keypair.generate();
+  const applicant = Keypair.generate();
+  const unauthorizedActor = Keypair.generate();
 
-    const solAmount = (payload.awardedLamports / 1e9).toFixed(2);
-    const content = {
-      username: "Breakpoint 2026 Grant Bot",
-      avatar_url: "https://solana.com/src/img/branding/solanaLogoMark.png",
-      embeds: [
-        {
-          title: "🚀 Nuevo Beneficiario: Rumbo a Breakpoint 2026",
-          color: 0x14f195, // Solana Green
-          fields: [
-            { name: "Builder", value: `\`${payload.builderPubkey}\``, inline: false },
-            { name: "GitHub", value: `[${payload.githubHandle}](https://github.com/${payload.githubHandle})`, inline: true },
-            { name: "Proof Score", value: `${payload.score}/100`, inline: true },
-            { name: "Beca de Viaje", value: `${solAmount} SOL + Entrada VIP`, inline: true },
-            { name: "Verificación On-Chain", value: `[Solana Explorer](https://explorer.solana.com/tx/${payload.txSignature}?cluster=devnet)`, inline: false }
-          ],
-          footer: { text: "Solana Foundation Travel Grants • Verificado por Anchor PDA" },
-          timestamp: new Date().toISOString()
-        }
-      ]
-    };
+  const STIPEND_AMOUNT = new anchor.BN(2 * LAMPORTS_PER_SOL);
+  const INITIAL_VAULT_FUND = new anchor.BN(10 * LAMPORTS_PER_SOL);
 
-    try {
-      await axios.post(CONFIG.DISCORD_WEBHOOK_URL, content);
-      console.log(`📡 Discord notification broadcast for ${payload.githubHandle}`);
-    } catch (err: any) {
-      console.error("⚠️ Failed to trigger Discord webhook:", err.message);
-    }
-  }
+  let poolPda: PublicKey;
+  let vaultPda: PublicKey;
+  let applicationPda: PublicKey;
 
-  public static async sendTicketEmail(payload: NotificationPayload): Promise<void> {
-    if (!payload.recipientEmail) return;
+  before(async () => {
+    // Fund test wallets
+    const airdropSignatures = await Promise.all([
+      provider.connection.requestAirdrop(councilMember.publicKey, 5 * LAMPORTS_PER_SOL),
+      provider.connection.requestAirdrop(applicant.publicKey, 5 * LAMPORTS_PER_SOL),
+      provider.connection.requestAirdrop(unauthorizedActor.publicKey, 2 * LAMPORTS_PER_SOL),
+    ]);
 
-    try {
-      const { data, error } = await resend.emails.send({
-        from: CONFIG.SENDER_EMAIL,
-        to: payload.recipientEmail,
-        subject: "🎉 ¡Felicidades! Tu beca y entrada a Solana Breakpoint 2026 están aprobadas",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px;">
-            <h1 style="color: #9945FF;">Rumbo a Breakpoint 2026</h1>
-            <p>Hola <strong>@${payload.githubHandle}</strong>,</p>
-            <p>Tu solicitud de viaje y acreditación para <strong>Solana Breakpoint 2026</strong> ha sido auditada y aprobada por el agente de verificación con un score de <strong>${payload.score}/100</strong>.</p>
-            <div style="background-color: #f7f9fa; padding: 15px; border-left: 4px solid #14F195; margin: 20px 0;">
-              <p style="margin: 0 0 8px 0;"><strong>Beca Asignada:</strong> ${(payload.awardedLamports / 1e9).toFixed(2)} SOL</p>
-              <p style="margin: 0 0 8px 0;"><strong>Entrada:</strong> Breakpoint Conference Pass (Confirmado)</p>
-              <p style="margin: 0;"><strong>Transacción:</strong> <a href="https://explorer.solana.com/tx/${payload.txSignature}?cluster=devnet">${payload.txSignature.slice(0, 16)}...</a></p>
-            </div>
-            <p>Ya puedes reclamar tus fondos directamente conectando tu wallet al protocolo.</p>
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">Solana Foundation Community Grants Team</p>
-          </div>
-        `
+    for (const sig of airdropSignatures) {
+      const latestBlockhash = await provider.connection.getLatestBlockhash();
+      await provider.connection.confirmTransaction({
+        signature: sig,
+        ...latestBlockhash,
       });
-
-      if (error) {
-        console.error("⚠️ Resend API Error:", error);
-      } else {
-        console.log(`📧 Confirmation email delivered via Resend. Message ID: ${data?.id}`);
-      }
-    } catch (err: any) {
-      console.error("⚠️ Exception sending email via Resend:", err.message);
     }
-  }
-}
+
+    [poolPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("grant_pool"), provider.wallet.publicKey.toBuffer()],
+      program.programId
+    );
+
+    [vaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), poolPda.toBuffer()],
+      program.programId
+    );
+
+    [applicationPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("grantee"), poolPda.toBuffer(), applicant.publicKey.toBuffer()],
+      program.programId
+    );
+  });
+
+  it("1. Successfully initializes the GrantPool with liquidity", async () => {
+    await program.methods
+      .initializePool(STIPEND_AMOUNT, INITIAL_VAULT_FUND)
+      .accounts({
+        pool: poolPda,
+        vault: vaultPda,
+        authority: provider.wallet.publicKey,
+        councilMultisig: councilMember.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const poolAccount = await program.account.grantPool.fetch(poolPda);
+    assert.equal(poolAccount.authority.toBase58(), provider.wallet.publicKey.toBase58());
+    assert.equal(poolAccount.councilMultisig.toBase58(), councilMember.publicKey.toBase58());
+    assert.equal(poolAccount.stipendPerGrantee.toString(), STIPEND_AMOUNT.toString());
+
+    const vaultBalance = await provider.connection.getBalance(vaultPda);
+    assert.equal(vaultBalance, INITIAL_VAULT_FUND.toNumber());
+  });
+
+  it("2. Submits candidate application to Rumbo a Breakpoint", async () => {
+    const demoUri = "ipfs://QmRumboBreakpoint2026BuilderPortfolioHash";
+
+    await program.methods
+      .submitApplication(demoUri)
+      .accounts({
+        pool: poolPda,
+        application: applicationPda,
+        applicant: applicant.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([applicant])
+      .rpc();
+
+    const appState = await program.account.granteeApplication.fetch(applicationPda);
+    assert.equal(appState.applicant.toBase58(), applicant.publicKey.toBase58());
+    assert.equal(appState.approvedMilestones, 0);
+    assert.equal(appState.isApproved, false);
+    assert.equal(appState.totalClaimed.toNumber(), 0);
+  });
+
+  it("3. Fails when unauthorized caller attempts to attest milestone", async () => {
+    try {
+      await program.methods
+        .attestMilestone(1)
+        .accounts({
+          pool: poolPda,
+          application: applicationPda,
+          granteeUser: applicant.publicKey,
+          councilMultisig: unauthorizedActor.publicKey,
+        })
+        .signers([unauthorizedActor])
+        .rpc();
+      assert.fail("Should have failed with unauthorized council error");
+    } catch (err: any) {
+      expect(err.toString()).to.include("UnauthorizedCouncilMember");
+    }
+  });
+
+  it("4. Council attests Milestone 1 (Travel & Flight Confirmation)", async () => {
+    await program.methods
+      .attestMilestone(1)
+      .accounts({
+        pool: poolPda,
+        application: applicationPda,
+        granteeUser: applicant.publicKey,
+        councilMultisig: councilMember.publicKey,
+      })
+      .signers([councilMember])
+      .rpc();
+
+    const appState = await program.account.granteeApplication.fetch(applicationPda);
+    assert.equal(appState.approvedMilestones, 1);
+    assert.equal(appState.isApproved, true);
+    assert.equal(appState.isCompleted, false);
+  });
+
+  it("5. Grantee claims Tranche 1 (50% travel advance)", async () => {
+    const initialApplicantBal = await provider.connection.getBalance(applicant.publicKey);
+
+    await program.methods
+      .claimTranche()
+      .accounts({
+        pool: poolPda,
+        vault: vaultPda,
+        application: applicationPda,
+        applicant: applicant.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([applicant])
+      .rpc();
+
+    const updatedAppState = await program.account.granteeApplication.fetch(applicationPda);
+    const expectedTrancheOne = 1 * LAMPORTS_PER_SOL; // 50% of 2 SOL
+    assert.equal(updatedAppState.totalClaimed.toNumber(), expectedTrancheOne);
+
+    const postApplicantBal = await provider.connection.getBalance(applicant.publicKey);
+    assert.isAbove(postApplicantBal, initialApplicantBal);
+  });
+
+  it("6. Rejects double-claim of Tranche 1 before Milestone 2 is attested", async () => {
+    try {
+      await program.methods
+        .claimTranche()
+        .accounts({
+          pool: poolPda,
+          vault: vaultPda,
+          application: applicationPda,
+          applicant: applicant.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([applicant])
+        .rpc();
+      assert.fail("Should have rejected with NoClaimableFundsAvailable");
+    } catch (err: any) {
+      expect(err.toString()).to.include("NoClaimableFundsAvailable");
+    }
+  });
+
+  it("7. Council attests Milestone 2 & Applicant claims final completion tranche", async () => {
+    await program.methods
+      .attestMilestone(2)
+      .accounts({
+        pool: poolPda,
+        application: applicationPda,
+        granteeUser: applicant.publicKey,
+        councilMultisig: councilMember.publicKey,
+      })
+      .signers([councilMember])
+      .rpc();
+
+    let appState = await program.account.granteeApplication.fetch(applicationPda);
+    assert.equal(appState.approvedMilestones, 2);
+    assert.equal(appState.isCompleted, true);
+
+    await program.methods
+      .claimTranche()
+      .accounts({
+        pool: poolPda,
+        vault: vaultPda,
+        application: applicationPda,
+        applicant: applicant.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([applicant])
+      .rpc();
+
+    appState = await program.account.granteeApplication.fetch(applicationPda);
+    assert.equal(appState.totalClaimed.toNumber(), STIPEND_AMOUNT.toNumber());
+  });
+});

@@ -1,10 +1,5 @@
-# Export runtime secrets
-cp .env.example .env
-echo "RESEND_API_KEY=re_your_enterprise_api_key" >> .env
-echo "DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder" >> .env
-
-# Launch via Docker Compose
-docker compose up -d --build
-
-# Verify container telemetry
-docker compose logs -f rumbo-orchestrator
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+PROGRAM_ID=Rumb0BrkP2o26Voyag3rProtoco1111111111111111
+RESEND_API_KEY=re_123456789abcdef
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/abcdef
+OPERATIONAL_ALERT_EMAIL=leads@superteam.fun

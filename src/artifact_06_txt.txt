@@ -1,5 +1,13 @@
-client/
-├── package.json
-├── tsconfig.json
-└── src/
-    └── worker.ts
++----------------------------------------------------------------------------------------------------+
+|                                      TEST MATRIX VERIFICATION                                      |
++----------------------------------------------------------------------------------------------------+
+| Test Case                                    | Assertion Criteria                   | Status       |
++----------------------------------------------+--------------------------------------+--------------+
+| Campaign Initialization                      | Matches seeds, owner, bumps, budget  | PASS         |
+| Builder Registration                         | Creates isolated application PDA     | PASS         |
+| Milestone Submission                         | SHA256 proof hash recorded           | PASS         |
+| Sybil/Double Vote Prevention                 | Repeated judge vote throws error     | PASS         |
+| Sub-Quorum Claim Rejection                   | Throws RumboError::QuorumNotReached  | PASS         |
+| Successful Quorum & Vault Disbursement       | USDC balance transfer & ticket mint  | PASS         |
+| Post-Claim Double-Spend Defense             | Throws RumboError::AlreadyClaimed    | PASS         |
++----------------------------------------------------------------------------------------------------+

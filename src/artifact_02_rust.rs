@@ -1,205 +1,216 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_lang::system_program::{transfer, Transfer};
 
-declare_id!("RumbocgN3c5i9Kq1bPnqTjH7u9pB4m2YkYhK7P8hK8k8");
+declare_id!("RumbobXjA5Fw5yHhBqHk1Y1L2mC8oY3P4r8q6g3tB2n");
 
 #[program]
-pub mod rumbo_protocol {
+pub mod rumbo_breakpoint {
     use super::*;
 
-    /// Initialize protocol configuration and admin governance
-    pub fn initialize_protocol(
-        ctx: Context<InitializeProtocol>,
-        verification_oracle: Pubkey,
+    /// Initialize the Rumbo Breakpoint configuration and sponsor vault
+    pub fn initialize_program(
+        ctx: Context<InitializeProgram>,
+        max_grant_amount: u64,
+        total_seats: u32,
     ) -> Result<()> {
-        let protocol = &mut ctx.accounts.protocol_config;
-        protocol.authority = ctx.accounts.authority.key();
-        protocol.verification_oracle = verification_oracle;
-        protocol.total_grants_created = 0;
-        protocol.total_disbursed_lamports = 0;
-        protocol.bump = ctx.bumps.protocol_config;
+        require!(max_grant_amount > 0, RumboError::InvalidGrantAmount);
+        require!(total_seats > 0, RumboError::InvalidSeatCount);
 
-        emit!(ProtocolInitializedEvent {
-            authority: protocol.authority,
-            oracle: verification_oracle,
+        let config = &mut ctx.accounts.config;
+        config.admin = ctx.accounts.admin.key();
+        config.vault_bump = ctx.bumps.vault;
+        config.config_bump = ctx.bumps.config;
+        config.max_grant_amount = max_grant_amount;
+        config.total_seats = total_seats;
+        config.allocated_seats = 0;
+        config.total_disbursed = 0;
+        config.is_paused = false;
+
+        emit!(ConfigInitializedEvent {
+            admin: config.admin,
+            max_grant_amount,
+            total_seats,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Create and fund a structured travel scholarship grant escrow
-    pub fn create_grant(
-        ctx: Context<CreateGrant>,
-        grant_id: u64,
-        total_amount: u64,
-        num_milestones: u8,
-        destination_event: String,
+    /// Builder submits a grant application for travel support and a Breakpoint ticket
+    pub fn apply_for_grant(
+        ctx: Context<ApplyForGrant>,
+        github_handle: String,
+        metadata_uri_hash: [u8; 32],
+        requested_amount: u64,
     ) -> Result<()> {
-        require!(total_amount > 0, RumboError::InvalidAmount);
-        require!(num_milestones > 0 && num_milestones <= 5, RumboError::InvalidMilestoneCount);
-        require!(destination_event.len() <= 32, RumboError::StringTooLong);
-
-        let grant = &mut ctx.accounts.grant;
-        grant.grant_id = grant_id;
-        grant.sponsor = ctx.accounts.sponsor.key();
-        grant.recipient = ctx.accounts.recipient.key();
-        grant.escrow_vault = ctx.accounts.escrow_vault.key();
-        grant.token_mint = ctx.accounts.token_mint.key();
-        grant.total_amount = total_amount;
-        grant.released_amount = 0;
-        grant.num_milestones = num_milestones;
-        grant.completed_milestones = 0;
-        grant.destination_event = destination_event;
-        grant.is_active = true;
-        grant.bump = ctx.bumps.grant;
-        grant.vault_bump = ctx.bumps.escrow_vault;
-
-        // Transfer funds from sponsor into the grant escrow vault
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.sponsor_token_account.to_account_info(),
-            to: ctx.accounts.escrow_vault.to_account_info(),
-            authority: ctx.accounts.sponsor.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        token::transfer(CpiContext::new(cpi_program, cpi_accounts), total_amount)?;
-
-        let protocol = &mut ctx.accounts.protocol_config;
-        protocol.total_grants_created = protocol.total_grants_created.checked_add(1).unwrap();
-
-        emit!(GrantCreatedEvent {
-            grant_id,
-            sponsor: grant.sponsor,
-            recipient: grant.recipient,
-            total_amount,
-            num_milestones,
-            timestamp: Clock::get()?.unix_timestamp,
-        });
-
-        Ok(())
-    }
-
-    /// Recipient submits proof hash (e.g. SHA-256 of GitHub PR, Devnet tx hash, or presentation)
-    pub fn submit_milestone_proof(
-        ctx: Context<SubmitMilestoneProof>,
-        milestone_index: u8,
-        proof_hash: [u8; 32],
-    ) -> Result<()> {
-        let grant = &ctx.accounts.grant;
-        require!(grant.is_active, RumboError::GrantInactive);
-        require!(ctx.accounts.recipient.key() == grant.recipient, RumboError::UnauthorizedRecipient);
-        require!(milestone_index == grant.completed_milestones, RumboError::MilestoneSequenceMismatch);
-
-        emit!(MilestoneSubmittedEvent {
-            grant_id: grant.grant_id,
-            recipient: grant.recipient,
-            milestone_index,
-            proof_hash,
-            timestamp: Clock::get()?.unix_timestamp,
-        });
-
-        Ok(())
-    }
-
-    /// Oracle/Admin validates milestone and triggers proportional milestone disbursement
-    pub fn verify_and_disburse(
-        ctx: Context<VerifyAndDisburse>,
-        milestone_index: u8,
-    ) -> Result<()> {
-        let protocol = &ctx.accounts.protocol_config;
+        let config = &ctx.accounts.config;
+        require!(!config.is_paused, RumboError::ProgramPaused);
         require!(
-            ctx.accounts.signer.key() == protocol.verification_oracle || ctx.accounts.signer.key() == protocol.authority,
-            RumboError::UnauthorizedOracle
+            github_handle.len() > 0 && github_handle.len() <= 64,
+            RumboError::InvalidGithubHandle
+        );
+        require!(
+            requested_amount > 0 && requested_amount <= config.max_grant_amount,
+            RumboError::GrantAmountExceeded
         );
 
         let grant = &mut ctx.accounts.grant;
-        require!(grant.is_active, RumboError::GrantInactive);
-        require!(milestone_index == grant.completed_milestones, RumboError::MilestoneSequenceMismatch);
+        grant.applicant = ctx.accounts.applicant.key();
+        grant.bump = ctx.bumps.grant;
+        grant.github_handle = github_handle.clone();
+        grant.metadata_uri_hash = metadata_uri_hash;
+        grant.requested_amount = requested_amount;
+        grant.disbursed_amount = 0;
+        grant.status = GrantStatus::Pending;
+        grant.milestone_level = 0;
+        grant.created_at = Clock::get()?.unix_timestamp;
 
-        let milestone_payout = grant.total_amount
-            .checked_div(grant.num_milestones as u64)
-            .ok_or(RumboError::MathOverflow)?;
+        emit!(GrantAppliedEvent {
+            applicant: grant.applicant,
+            github_handle,
+            requested_amount,
+            metadata_uri_hash,
+            timestamp: grant.created_at,
+        });
 
-        grant.completed_milestones = grant.completed_milestones.checked_add(1).ok_or(RumboError::MathOverflow)?;
-        grant.released_amount = grant.released_amount.checked_add(milestone_payout).ok_or(RumboError::MathOverflow)?;
+        Ok(())
+    }
 
-        if grant.completed_milestones == grant.num_milestones {
-            grant.is_active = false;
+    /// Admin / Committee reviews the application (Approve, Reject, or Revoke)
+    pub fn review_application(
+        ctx: Context<ReviewApplication>,
+        new_status: GrantStatus,
+    ) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        let grant = &mut ctx.accounts.grant;
+
+        require!(grant.status == GrantStatus::Pending, RumboError::InvalidStatusTransition);
+        require!(
+            new_status == GrantStatus::Approved || new_status == GrantStatus::Rejected,
+            RumboError::InvalidStatusTransition
+        );
+
+        if new_status == GrantStatus::Approved {
+            require!(
+                config.allocated_seats < config.total_seats,
+                RumboError::NoSeatsAvailable
+            );
+            config.allocated_seats = config.allocated_seats.checked_add(1).ok_or(RumboError::MathOverflow)?;
         }
 
-        let grant_id_bytes = grant.grant_id.to_le_bytes();
-        let seeds = &[
-            b"grant_vault",
-            grant_id_bytes.as_ref(),
-            &[grant.vault_bump],
-        ];
-        let signer_seeds = &[&seeds[..]];
+        grant.status = new_status;
 
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.escrow_vault.to_account_info(),
-            to: ctx.accounts.recipient_token_account.to_account_info(),
-            authority: ctx.accounts.escrow_vault.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        token::transfer(
-            CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds),
-            milestone_payout,
-        )?;
-
-        let protocol_mut = &mut ctx.accounts.protocol_config;
-        protocol_mut.total_disbursed_lamports = protocol_mut
-            .total_disbursed_lamports
-            .checked_add(milestone_payout)
-            .ok_or(RumboError::MathOverflow)?;
-
-        emit!(MilestoneDisbursedEvent {
-            grant_id: grant.grant_id,
-            recipient: grant.recipient,
-            milestone_index,
-            amount_disbursed: milestone_payout,
-            all_milestones_completed: !grant.is_active,
+        emit!(GrantReviewedEvent {
+            applicant: grant.applicant,
+            status: grant.status,
+            reviewer: ctx.accounts.admin.key(),
             timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Emergency revocation by protocol authority in case of fraud
-    pub fn emergency_cancel_grant(ctx: Context<EmergencyCancelGrant>) -> Result<()> {
+    /// Verify a project milestone and disburse funds directly from the Vault PDA
+    pub fn verify_milestone_and_disburse(
+        ctx: Context<VerifyMilestoneAndDisburse>,
+        disbursement_amount: u64,
+        proof_hash: [u8; 32],
+    ) -> Result<()> {
+        let config = &mut ctx.accounts.config;
         let grant = &mut ctx.accounts.grant;
-        require!(grant.is_active, RumboError::GrantInactive);
 
-        let remaining_balance = ctx.accounts.escrow_vault.amount;
-        require!(remaining_balance > 0, RumboError::NoFundsInEscrow);
+        require!(!config.is_paused, RumboError::ProgramPaused);
+        require!(grant.status == GrantStatus::Approved, RumboError::GrantNotApproved);
+        require!(disbursement_amount > 0, RumboError::InvalidDisbursementAmount);
 
-        grant.is_active = false;
+        let potential_total = grant
+            .disbursed_amount
+            .checked_add(disbursement_amount)
+            .ok_or(RumboError::MathOverflow)?;
 
-        let grant_id_bytes = grant.grant_id.to_le_bytes();
+        require!(
+            potential_total <= grant.requested_amount,
+            RumboError::DisbursementCapExceeded
+        );
+
+        let vault_lamports = ctx.accounts.vault.to_account_info().lamports();
+        require!(
+            vault_lamports >= disbursement_amount,
+            RumboError::InsufficientVaultFunds
+        );
+
+        // Deduct from vault PDA using CPI with seeds
+        let admin_key = config.admin;
         let seeds = &[
-            b"grant_vault",
-            grant_id_bytes.as_ref(),
-            &[grant.vault_bump],
+            b"vault".as_ref(),
+            admin_key.as_ref(),
+            &[config.vault_bump],
         ];
-        let signer_seeds = &[&seeds[..]];
+        let signer = &[&seeds[..]];
 
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.escrow_vault.to_account_info(),
-            to: ctx.accounts.sponsor_refund_account.to_account_info(),
-            authority: ctx.accounts.escrow_vault.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        token::transfer(
-            CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds),
-            remaining_balance,
-        )?;
+        let transfer_ctx = CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.vault.to_account_info(),
+                to: ctx.accounts.applicant.to_account_info(),
+            },
+            signer,
+        );
 
-        emit!(GrantCancelledEvent {
-            grant_id: grant.grant_id,
-            refund_recipient: ctx.accounts.sponsor_refund_account.key(),
-            refunded_amount: remaining_balance,
+        transfer(transfer_ctx, disbursement_amount)?;
+
+        // Update state
+        grant.disbursed_amount = potential_total;
+        grant.milestone_level = grant.milestone_level.checked_add(1).ok_or(RumboError::MathOverflow)?;
+        
+        if grant.disbursed_amount == grant.requested_amount {
+            grant.status = GrantStatus::Completed;
+        }
+
+        config.total_disbursed = config
+            .total_disbursed
+            .checked_add(disbursement_amount)
+            .ok_or(RumboError::MathOverflow)?;
+
+        emit!(MilestoneDisbursedEvent {
+            applicant: grant.applicant,
+            amount: disbursement_amount,
+            milestone_level: grant.milestone_level,
+            proof_hash,
+            total_disbursed_to_applicant: grant.disbursed_amount,
+            status: grant.status,
             timestamp: Clock::get()?.unix_timestamp,
         });
 
+        Ok(())
+    }
+
+    /// Admin can deposit native lamports to the escrow vault
+    pub fn fund_vault(ctx: Context<FundVault>, amount: u64) -> Result<()> {
+        require!(amount > 0, RumboError::InvalidDepositAmount);
+
+        let transfer_ctx = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.admin.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+            },
+        );
+        transfer(transfer_ctx, amount)?;
+
+        emit!(VaultFundedEvent {
+            funder: ctx.accounts.admin.key(),
+            amount,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    /// Admin emergency pause toggle
+    pub fn set_paused(ctx: Context<AdminOnly>, paused: bool) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        config.is_paused = paused;
         Ok(())
     }
 }
@@ -209,251 +220,277 @@ pub mod rumbo_protocol {
 // -----------------------------------------------------------------------------
 
 #[derive(Accounts)]
-pub fn initialize_protocol(ctx: Context<InitializeProtocol>) -> Result<()> {
-    Ok(())
+pub fn initialize_program_accounts(
+    admin: &Signer,
+) -> bool {
+    true
 }
 
 #[derive(Accounts)]
-pub struct InitializeProtocol<'info> {
+pub struct InitializeProgram<'info> {
     #[account(
         init,
-        payer = authority,
-        space = 8 + ProtocolConfig::INIT_SPACE,
-        seeds = [b"protocol_config"],
+        payer = admin,
+        space = 8 + ConfigAccount::LEN,
+        seeds = [b"config", admin.key().as_ref()],
         bump
     )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
+    pub config: Account<'info, ConfigAccount>,
+
+    /// CHECK: PDA acting as the fund vault; safe because seeds and bump are validated
+    #[account(
+        mut,
+        seeds = [b"vault", admin.key().as_ref()],
+        bump
+    )]
+    pub vault: SystemAccount<'info>,
+
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub admin: Signer<'info>,
+
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-#[instruction(grant_id: u64)]
-pub struct CreateGrant<'info> {
-    #[account(
-        mut,
-        seeds = [b"protocol_config"],
-        bump = protocol_config.bump
-    )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
-
+pub struct ApplyForGrant<'info> {
     #[account(
         init,
-        payer = sponsor,
-        space = 8 + Grant::INIT_SPACE,
-        seeds = [b"grant", grant_id.to_le_bytes().as_ref()],
+        payer = applicant,
+        space = 8 + GrantAccount::LEN,
+        seeds = [b"grant", applicant.key().as_ref()],
         bump
     )]
-    pub grant: Account<'info, Grant>,
+    pub grant: Account<'info, GrantAccount>,
 
     #[account(
-        init,
-        payer = sponsor,
-        seeds = [b"grant_vault", grant_id.to_le_bytes().as_ref()],
-        bump,
-        token::mint = token_mint,
-        token::authority = escrow_vault
+        seeds = [b"config", config.admin.as_ref()],
+        bump = config.config_bump
     )]
-    pub escrow_vault: Account<'info, TokenAccount>,
-
-    pub token_mint: Account<'info, Mint>,
-
-    #[account(
-        mut,
-        constraint = sponsor_token_account.mint == token_mint.key(),
-        constraint = sponsor_token_account.owner == sponsor.key()
-    )]
-    pub sponsor_token_account: Account<'info, TokenAccount>,
-
-    /// CHECK: Grant recipient validated upon submission
-    pub recipient: AccountInfo<'info>,
+    pub config: Account<'info, ConfigAccount>,
 
     #[account(mut)]
-    pub sponsor: Signer<'info>,
+    pub applicant: Signer<'info>,
 
-    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
-pub struct SubmitMilestoneProof<'info> {
+pub struct ReviewApplication<'info> {
     #[account(
-        seeds = [b"grant", grant.grant_id.to_le_bytes().as_ref()],
+        mut,
+        seeds = [b"config", config.admin.as_ref()],
+        bump = config.config_bump,
+        has_one = admin @ RumboError::UnauthorizedAdmin
+    )]
+    pub config: Account<'info, ConfigAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"grant", grant.applicant.as_ref()],
         bump = grant.bump
     )]
-    pub grant: Account<'info, Grant>,
-    pub recipient: Signer<'info>,
+    pub grant: Account<'info, GrantAccount>,
+
+    pub admin: Signer<'info>,
 }
 
 #[derive(Accounts)]
-pub struct VerifyAndDisburse<'info> {
+pub struct VerifyMilestoneAndDisburse<'info> {
     #[account(
         mut,
-        seeds = [b"protocol_config"],
-        bump = protocol_config.bump
+        seeds = [b"config", config.admin.as_ref()],
+        bump = config.config_bump,
+        has_one = admin @ RumboError::UnauthorizedAdmin
     )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
+    pub config: Account<'info, ConfigAccount>,
 
     #[account(
         mut,
-        seeds = [b"grant", grant.grant_id.to_le_bytes().as_ref()],
-        bump = grant.bump
+        seeds = [b"grant", applicant.key().as_ref()],
+        bump = grant.bump,
+        has_one = applicant @ RumboError::ApplicantMismatch
     )]
-    pub grant: Account<'info, Grant>,
+    pub grant: Account<'info, GrantAccount>,
 
+    /// CHECK: PDA holds travel funds; checked via seeds
     #[account(
         mut,
-        seeds = [b"grant_vault", grant.grant_id.to_le_bytes().as_ref()],
-        bump = grant.vault_bump
+        seeds = [b"vault", config.admin.as_ref()],
+        bump = config.vault_bump
     )]
-    pub escrow_vault: Account<'info, TokenAccount>,
+    pub vault: SystemAccount<'info>,
 
-    #[account(
-        mut,
-        constraint = recipient_token_account.mint == grant.token_mint,
-        constraint = recipient_token_account.owner == grant.recipient
-    )]
-    pub recipient_token_account: Account<'info, TokenAccount>,
+    /// CHECK: Target recipient account, verified by grant.applicant
+    #[account(mut)]
+    pub applicant: SystemAccount<'info>,
 
-    pub signer: Signer<'info>,
-    pub token_program: Program<'info, Token>,
+    pub admin: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct EmergencyCancelGrant<'info> {
+pub struct FundVault<'info> {
     #[account(
-        seeds = [b"protocol_config"],
-        bump = protocol_config.bump,
-        has_one = authority
+        seeds = [b"config", config.admin.as_ref()],
+        bump = config.config_bump,
+        has_one = admin @ RumboError::UnauthorizedAdmin
     )]
-    pub protocol_config: Account<'info, ProtocolConfig>,
+    pub config: Account<'info, ConfigAccount>,
 
-    #[account(
-        mut,
-        seeds = [b"grant", grant.grant_id.to_le_bytes().as_ref()],
-        bump = grant.bump
-    )]
-    pub grant: Account<'info, Grant>,
-
+    /// CHECK: PDA fund vault
     #[account(
         mut,
-        seeds = [b"grant_vault", grant.grant_id.to_le_bytes().as_ref()],
-        bump = grant.vault_bump
+        seeds = [b"vault", config.admin.as_ref()],
+        bump = config.vault_bump
     )]
-    pub escrow_vault: Account<'info, TokenAccount>,
+    pub vault: SystemAccount<'info>,
 
+    #[account(mut)]
+    pub admin: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AdminOnly<'info> {
     #[account(
         mut,
-        constraint = sponsor_refund_account.mint == grant.token_mint,
-        constraint = sponsor_refund_account.owner == grant.sponsor
+        seeds = [b"config", config.admin.as_ref()],
+        bump = config.config_bump,
+        has_one = admin @ RumboError::UnauthorizedAdmin
     )]
-    pub sponsor_refund_account: Account<'info, TokenAccount>,
+    pub config: Account<'info, ConfigAccount>,
 
-    pub authority: Signer<'info>,
-    pub token_program: Program<'info, Token>,
+    pub admin: Signer<'info>,
 }
 
 // -----------------------------------------------------------------------------
-// STATE SCHEMAS
+// STATE DEFINITIONS
 // -----------------------------------------------------------------------------
 
 #[account]
-#[derive(InitSpace)]
-pub struct ProtocolConfig {
-    pub authority: Pubkey,
-    pub verification_oracle: Pubkey,
-    pub total_grants_created: u64,
-    pub total_disbursed_lamports: u64,
-    pub bump: u8,
+pub struct ConfigAccount {
+    pub admin: Pubkey,         // 32
+    pub vault_bump: u8,        // 1
+    pub config_bump: u8,       // 1
+    pub max_grant_amount: u64, // 8
+    pub total_seats: u32,      // 4
+    pub allocated_seats: u32,  // 4
+    pub total_disbursed: u64,  // 8
+    pub is_paused: bool,       // 1
+}
+
+impl ConfigAccount {
+    pub const LEN: usize = 32 + 1 + 1 + 8 + 4 + 4 + 8 + 1 + 32; // padded
 }
 
 #[account]
-#[derive(InitSpace)]
-pub struct Grant {
-    pub grant_id: u64,
-    pub sponsor: Pubkey,
-    pub recipient: Pubkey,
-    pub escrow_vault: Pubkey,
-    pub token_mint: Pubkey,
-    pub total_amount: u64,
-    pub released_amount: u64,
-    pub num_milestones: u8,
-    pub completed_milestones: u8,
-    #[max_len(32)]
-    pub destination_event: String,
-    pub is_active: bool,
-    pub bump: u8,
-    pub vault_bump: u8,
+pub struct GrantAccount {
+    pub applicant: Pubkey,            // 32
+    pub bump: u8,                     // 1
+    pub github_handle: String,        // 4 + 64 = 68
+    pub metadata_uri_hash: [u8; 32],  // 32
+    pub requested_amount: u64,        // 8
+    pub disbursed_amount: u64,        // 8
+    pub status: GrantStatus,          // 1
+    pub milestone_level: u8,          // 1
+    pub created_at: i64,              // 8
+}
+
+impl GrantAccount {
+    pub const LEN: usize = 32 + 1 + 68 + 32 + 8 + 8 + 1 + 1 + 8 + 32;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GrantStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Completed,
 }
 
 // -----------------------------------------------------------------------------
-// EVENTS & ERRORS
+// EVENTS
 // -----------------------------------------------------------------------------
 
 #[event]
-pub struct ProtocolInitializedEvent {
-    pub authority: Pubkey,
-    pub oracle: Pubkey,
+pub struct ConfigInitializedEvent {
+    pub admin: Pubkey,
+    pub max_grant_amount: u64,
+    pub total_seats: u32,
     pub timestamp: i64,
 }
 
 #[event]
-pub struct GrantCreatedEvent {
-    pub grant_id: u64,
-    pub sponsor: Pubkey,
-    pub recipient: Pubkey,
-    pub total_amount: u64,
-    pub num_milestones: u8,
+pub struct GrantAppliedEvent {
+    pub applicant: Pubkey,
+    pub github_handle: String,
+    pub requested_amount: u64,
+    pub metadata_uri_hash: [u8; 32],
     pub timestamp: i64,
 }
 
 #[event]
-pub struct MilestoneSubmittedEvent {
-    pub grant_id: u64,
-    pub recipient: Pubkey,
-    pub milestone_index: u8,
-    pub proof_hash: [u8; 32],
+pub struct GrantReviewedEvent {
+    pub applicant: Pubkey,
+    pub status: GrantStatus,
+    pub reviewer: Pubkey,
     pub timestamp: i64,
 }
 
 #[event]
 pub struct MilestoneDisbursedEvent {
-    pub grant_id: u64,
-    pub recipient: Pubkey,
-    pub milestone_index: u8,
-    pub amount_disbursed: u64,
-    pub all_milestones_completed: bool,
+    pub applicant: Pubkey,
+    pub amount: u64,
+    pub milestone_level: u8,
+    pub proof_hash: [u8; 32],
+    pub total_disbursed_to_applicant: u64,
+    pub status: GrantStatus,
     pub timestamp: i64,
 }
 
 #[event]
-pub struct GrantCancelledEvent {
-    pub grant_id: u64,
-    pub refund_recipient: Pubkey,
-    pub refunded_amount: u64,
+pub struct VaultFundedEvent {
+    pub funder: Pubkey,
+    pub amount: u64,
     pub timestamp: i64,
 }
 
+// -----------------------------------------------------------------------------
+// ERROR CODES
+// -----------------------------------------------------------------------------
+
 #[error_code]
 pub enum RumboError {
-    #[msg("Amount must be greater than zero.")]
-    InvalidAmount,
-    #[msg("Milestone count must be between 1 and 5.")]
-    InvalidMilestoneCount,
-    #[msg("String exceeds maximum allowed length.")]
-    StringTooLong,
-    #[msg("Grant is inactive or already fully disbursed.")]
-    GrantInactive,
-    #[msg("Signer does not match designated recipient.")]
-    UnauthorizedRecipient,
-    #[msg("Milestone proof submitted does not match sequential order.")]
-    MilestoneSequenceMismatch,
-    #[msg("Signer is not authorized oracle or protocol authority.")]
-    UnauthorizedOracle,
-    #[msg("Math arithmetic overflow occurred.")]
+    #[msg("Grant amount must be greater than zero.")]
+    InvalidGrantAmount,
+    #[msg("Total travel seats must be greater than zero.")]
+    InvalidSeatCount,
+    #[msg("Program operations are currently paused by the admin.")]
+    ProgramPaused,
+    #[msg("Github handle must be non-empty and max 64 characters.")]
+    InvalidGithubHandle,
+    #[msg("Requested grant amount exceeds program maximum limit.")]
+    GrantAmountExceeded,
+    #[msg("Invalid status transition for grant.")]
+    InvalidStatusTransition,
+    #[msg("All allocated Breakpoint seats have been exhausted.")]
+    NoSeatsAvailable,
+    #[msg("Arithmetic overflow detected.")]
     MathOverflow,
-    #[msg("No remaining funds in escrow vault.")]
-    NoFundsInEscrow,
+    #[msg("Only approved grants can receive milestone disbursements.")]
+    GrantNotApproved,
+    #[msg("Disbursement amount must be greater than zero.")]
+    InvalidDisbursementAmount,
+    #[msg("Disbursement exceeds total requested grant allocation.")]
+    DisbursementCapExceeded,
+    #[msg("Insufficient lamports in the escrow vault.")]
+    InsufficientVaultFunds,
+    #[msg("Deposit amount must be greater than zero.")]
+    InvalidDepositAmount,
+    #[msg("Signer is not authorized as the program admin.")]
+    UnauthorizedAdmin,
+    #[msg("Applicant pubkey does not match grant profile.")]
+    ApplicantMismatch,
 }

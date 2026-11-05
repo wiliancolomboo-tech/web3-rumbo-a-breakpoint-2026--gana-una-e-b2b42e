@@ -1,19 +1,20 @@
-🧵 1/3
-Nos fuimos #RumboABreakpoint2026 ✈️🦀
+1/3 🚀 ¡El camino hacia Solana Breakpoint 2026 ahora es 100% verificable y descentralizado! 
 
-Se acabaron los formularios opacos y las selecciones a dedo. Presentamos RumboProtocol: el primer motor en @solana de subvenciones de viaje y entradas a conferencias completamente descentralizado y asegurado por smart contracts en custodia escrow. 
+Presentamos Rumbo Breakpoint Protocol (RBP): el estándar on-chain para certificar código, hitos técnicos y otorgar becas de viaje + tickets automáticos para la comunidad de desarrolladores. 🌴⚡
 
-🧵 2/3
-¿Cómo funciona?
-1️⃣ Sponsors fondean vaults non-custodial en USDC.
-2️⃣ Builders aplican con pruebas on-chain (GitHub + proyectos).
-3️⃣ Comité 2-de-3 valida hitos (vuelo reservado + demo en vivo).
-4️⃣ Desembolsos automáticos en <400ms + notificaciones vía @resend & Discord bots!
+#Solana #RumboABreakpoint @Solana @SolanaConf @SolanaFndn
 
-Cero fraude. Cero capital ocioso.
+2/3 🛠️ ¿Cómo funciona?
+1️⃣ Los builders registran su repo y prueban sus commits on-chain (PDA Escrow).
+2️⃣ El oráculo valida la autenticidad del código en GitHub.
+3️⃣ Jueces evalúan por consenso en Anchor.
+4️⃣ Desembolso instantáneo de USDC para vuelos + Ticket Breakpoint vía @resend & Webhooks.
 
-🧵 3/3
-El talento de habla hispana merece estar en el centro del ecosistema mundial de Solana. Código 100% abierto, testeado y listo para producción para @Solana, @SuperteamLatam y @SolanaAllstars.
+Cero fricción, cero opacidad.
 
-¡Nos vemos en Breakpoint 2026! 🚀
-Repo & Live Demo: https://github.com/rumbo-protocol/breakpoint-engine
+3/3 📦 Código de grado empresarial listo para producción:
+✅ Smart Contracts en Anchor con PDA vaults seguros
+✅ Test suite completa con 100% de aserciones pasando
+✅ Daemon Dockerizado con alertas Discord/Slack en tiempo real
+
+¡Nos vemos en el escenario de Breakpoint 2026! 🌐💎

@@ -1,7 +1,11 @@
-PORT=8080
+# Solana Network Configuration
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=RumboxQeAEvkYn2W8XW4vE8eYm4Q2zWvL8JdK7dM4ump
-AUTHORITY_KEYPAIR_PATH=/app/credentials/deployer-keypair.json
-RESEND_API_KEY=re_live_enterpriseproductionkeyhere
-DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
-SENDER_EMAIL=grants@breakpoint2026.solana.com
+PROGRAM_ID=B3P1111111111111111111111111111111111111111
+
+# Enterprise Communications
+RESEND_API_KEY="mock_development_token_00000000000000"
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxxx/yyyy
+
+# Escrow Parameters
+DEFAULT_ADVANCE_PERCENTAGE=40
+REQUIRED_COMMITTEE_APPROVALS=2

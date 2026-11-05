@@ -1,23 +1,19 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum RumboError {
-    #[msg("Campaign deadline has already passed.")]
-    CampaignExpired,
-    #[msg("Campaign has insufficient balance for this allocation.")]
-    InsufficientCampaignVaultFunds,
-    #[msg("Grantee is not yet verified for payout.")]
-    GranteeNotVerified,
-    #[msg("All milestones have not yet been approved.")]
-    MilestonesPending,
-    #[msg("Grantee has already claimed the allocated stipend.")]
-    AlreadyClaimed,
-    #[msg("Campaign is currently active; refund cannot be initiated.")]
-    CampaignStillActive,
-    #[msg("Unauthorized review authority.")]
-    UnauthorizedReviewer,
-    #[msg("Numerical overflow occurred in calculations.")]
+pub enum BreakpointError {
+    #[msg("Invalid authority signature for this operation.")]
+    Unauthorized,
+    #[msg("Invalid status transition for grant escrow.")]
+    InvalidStageTransition,
+    #[msg("Milestone deadline has passed. Grant is subject to clawback.")]
+    GrantExpired,
+    #[msg("Milestone deadline has not yet expired.")]
+    GrantNotExpired,
+    #[msg("Metadata URI exceeds maximum permissible length (128 bytes).")]
+    MetadataTooLong,
+    #[msg("Numerical overflow during arithmetic operation.")]
     MathOverflow,
-    #[msg("Strings exceeds maximum permissible length.")]
-    InputStringTooLong,
+    #[msg("Invalid check-in signature for Breakpoint 2026 venue.")]
+    InvalidCheckinSignature,
 }

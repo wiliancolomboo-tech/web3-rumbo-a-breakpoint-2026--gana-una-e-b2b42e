@@ -1,2 +1,3 @@
-tests/
-└── rumbo-protocol.ts
+LATAM tiene el mejor talento builder del mundo, pero cruzar el Atlántico para @Solana Breakpoint no debería costar semanas de burocracia ni dejar a devs sin liquidez. 🌍✈️
+
+Presentamos RumboVault: el protocolo on-chain que hace realidad "Rumbo a Breakpoint 2026". 🧵👇

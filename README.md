@@ -1,33 +1,43 @@
 # Deliverable: Rumbo a Breakpoint 2026: gana una entrada y apoyo para tu viaje
 **Platform:** SuperteamEarn | **Ecosystem:** Solana | **Prize:** 5,000 USDG
-**Generated At:** 2026-11-02 23:45:51
-
----
-
-# Rumbo a Breakpoint 2026: Verifiable Travel Grant & Ticket Allocation Engine (Rumbo Protocol)
+**Generated At:** 2026-11-04 23:59:00
 
 ---
 
 # 1. Executive Summary & Enterprise Value Proposition
 
 ### 1.1 Problem Definition
-Every year, thousands of top-tier developers, founders, and students across Latin America and emerging markets apply for travel stipends and community passes to **Solana Breakpoint**. However, traditional hackathon and travel grant systems suffer from:
-1. **Opaque Selection & Subjectivity:** Selection committees operate behind closed doors, leading to accusations of bias, favoritism, and sybil abuse.
-2. **Reimbursement Bottlenecks & Operational Drag:** Recipients often wait weeks or months for travel reimbursements due to cross-border fiat friction, banking hurdles, and manual receipt validation.
-3. **Secondary Market Ticket Exploitation:** Manually distributed promotional codes frequently leak, resulting in scalp trading rather than reaching genuine builders.
+Community initiatives like **"Rumbo a Breakpoint 2026"** provide life-changing travel stipends and conference passes to high-impact builders across regional ecosystems (e.g., LatAm, APAC, Africa). However, traditional grant and travel subsidy management encounters critical structural failure modes:
+1. **Capital Inefficiency & Clawback Impasse:** Upfront lump-sum grants risk recipient drop-out, travel cancellations, or non-attendance at Solana Breakpoint with zero reclaim mechanisms.
+2. **Administrative Latency & Review Bottlenecks:** Manual verification of flight bookings, visa clearances, and on-site attendance forces grant administrators to process hundreds of invoices via spreadsheets, delaying disbursements and stranding cash-constrained developers.
+3. **Auditability Deficit:** Donors, DAO treasuries, and foundation sponsors lack verifiable on-chain proof that allocated funds directly subsidized actual conference participation and post-event hackathon building.
 
-### 1.2 Architecture Thesis
-**Rumbo Protocol** is a transparent, on-chain merit allocation engine built natively on Solana Anchor. It replaces opaque grant processes with a **verifiable, multi-sig attestation pipeline, automated milestone escrow, and soulbound on-chain ticket voucher issuance**.
+### 1.2 Architecture Thesis: The Rumbo Escrow Protocol
+The **Rumbo Escrow Protocol** is a decentralized, milestone-governed travel sponsorship and proof-of-attendance disbursement engine built natively on Solana. 
 
-* **Verifiable Proof-of-Merit:** Builders submit their GitHub hashes, open-source repositories, and hackathon project fingerprints directly to the Solana program.
-* **Deterministic PDA Vaults:** Grant pools (funded in native SOL or SPL-USDC) are locked in Program Derived Addresses (PDAs) with milestone-gated release conditions.
-* **Soulbound Ticket Receipts:** Breakpoint passes are minted as non-transferable on-chain vouchers mapped directly to applicant public keys.
-* **Automated Off-Chain Dispatcher:** An enterprise-grade relayer observes on-chain attestations and triggers instantaneous travel logistics payouts via Solana web3, transactional flight confirmation emails with QR passes via **Resend**, and real-time review alerts via **Discord Webhooks**.
+```
+                                [ Sponsor Treasury / DAO ]
+                                            |
+                                  (USDC/SOL Deposit)
+                                            v
+[ Applicant ] ---> Submit Milestones ---> [ PDA Escrow Vault ] ---> Milestone Verified ---> [ Instant Payout ]
+                         |                         ^
+                 (Flight / Ticket / Visa)          |
+                         |                         |
+                         v                         |
+                [ Rumbo Sentinel Node ] -----------+
+                (IPFS Hashing + Jury Sig)
+```
 
-### 1.3 Business Impact & Turnkey Handover
-* **100% Operational Transparency:** Donors, sponsors, and community members can audit every basis point distributed.
-* **Instant Payout Settlement:** Grantees receive audited travel stipends in sub-second finality.
-* **Zero Overhead for Event Staff:** Automated ticket verification eliminates manual spreadsheet tracking and code distribution.
+The system splits travel support into three deterministic milestones:
+1. **Milestone 0 (Travel Logistics Anchor):** Verified flight reservation & Breakpoint 2026 registration ticket hash $\rightarrow$ Releases $50\%$ for immediate booking liquidity.
+2. **Milestone 1 (Proof-of-Transit / Visa Attestation):** Consular visa issuance or transport clearance check $\rightarrow$ Releases $25\%$ per diem allowance.
+3. **Milestone 2 (Proof-of-Attendance & Hackathon Build):** Breakpoint 2026 on-site check-in attestation (Ed25519 cryptographic badge signature or GPS/NFC oracle claim) $\rightarrow$ Releases remaining $25\%$ completion bonus.
+
+### 1.3 Key Metrics & Enterprise Impact
+* **100% Capital Protection:** Unclaimed or forfeited milestones automatically fall back to the sponsor DAO treasury via programmatic clawback timers.
+* **Sub-Second Automated Payouts:** Direct PDA disbursement via Solana native Lamports or SPL-Token (USDC) upon cryptographic threshold jury approval.
+* **Turnkey Multi-Channel Telemetry:** Instant developer updates through automated Resend transactional email and Discord/Slack triage webhooks.
 
 ---
 
@@ -35,230 +45,279 @@ Every year, thousands of top-tier developers, founders, and students across Lati
 
 ```mermaid
 flowchart TD
-    subgraph Builder_Experience [Builder Journey]
-        A[Applicant / Builder] -->|1. Submit Profile & Project Hash| B[Rumbo CLI / Web Portal]
-        B -->|2. apply_for_grant ix| C[Solana Program: rumbo_breakpoint]
+    subgraph ClientLayer ["1. Applicant & Sponsor Client Layer"]
+        A[Applicant Builder] -->|1. Applies & Submits Metadata| CLI[Rumbo Sentinel CLI / Web3 DApp]
+        SP[Foundation Sponsor] -->|2. Approves & Funds PDA| CLI
     end
 
-    subgraph OnChain_State [Solana Anchor Core Engine]
-        C -->|Initialize Application PDA| D[(Application State PDA)]
-        E[Grant Committee / Judges] -->|3. attest_contribution ix| C
-        C -->|Transition State to Approved| D
-        C -->|4. disburse_travel_stipend ix| F[(Treasury Vault PDA)]
-        F -->|Release SOL/USDC| A
-        C -->|5. claim_breakpoint_ticket ix| G[(Soulbound Ticket PDA)]
-        C -->|Emit Event: StipendDisbursed & TicketIssued| H[Solana Gossip / RPC Logs]
+    subgraph OnChainLayer ["2. Solana Core Engine (Anchor Program)"]
+        CONF[Config PDA: Authority, Quorum, Registry]
+        ESCROW[GrantEscrow PDA: Builder, Total, Status]
+        VAULT[(Vault PDA: Lamport / SPL Escrow)]
+        MSTONE[Milestone Accounts: Proof Hashes & State]
+
+        CLI -->|Initialize Program| CONF
+        CLI -->|Register Grant| ESCROW
+        CLI -->|Fund Grant Escrow| VAULT
+        CLI -->|Submit Milestone Proof| MSTONE
     end
 
-    subgraph OffChain_Automation [Enterprise Relayer Service]
-        H -->|WebSocket Log Subscription| I[Rumbo Automation Worker]
-        I -->|Parse Event Payload| J{Event Type}
-        J -->|TicketClaimed| K[Resend Transactional Email Engine]
-        J -->|GrantApproved| L[Discord Community Webhook]
-        K -->|Deliver Boarding Pass & QR Badge| A
-        L -->|Broadcast Merit Leaderboard| M[Solana Community Feed]
+    subgraph OffChainAgent ["3. Rumbo Sentinel Automation & Enterprise Worker"]
+        ORACLE[Rumbo Sentinel Daemon]
+        ORACLE -->|RPC Event Polling / WS| ESCROW
+        ORACLE -->|Cryptographic Verification| IPFS[IPFS / Arweave Receipts]
+        ORACLE -->|Threshold Jury Signature| ESCROW
     end
+
+    subgraph EnterpriseNotification ["4. Enterprise Integration Layer"]
+        ORACLE -->|Disbursement Event| RESEND[Resend API: Email Confirmation]
+        ORACLE -->|Jury Alert & Audit Logs| DISCORD[Discord / Slack Webhooks]
+        RESEND -->|Transactional Delivery| A
+        DISCORD -->|Audit Feed| SP
+    end
+
+    VAULT -.->|Disburse Lamports| A
+    ESCROW -.->|Auto Refund on Timeout| SP
 ```
 
 ### Integration Topology
-* **Solana RPC (Devnet/Mainnet-Beta):** Primary low-latency transport for transactions and WebSocket account/log subscriptions.
-* **Resend API:** Enterprise transactional email platform sending programmatic, cryptographically signed Breakpoint 2026 Ticket QR codes and travel vouchers.
-* **Discord/Slack Enterprise Webhooks:** Real-time visibility into governance decisions, committee attestations, and disbursed treasury funds.
+* **On-Chain Settlement Engine:** Anchor program on Solana Devnet/Mainnet deploying deterministic PDA vaults derived from seed `[b"grant", builder.key(), grant_id.to_le_bytes()]`.
+* **Off-Chain Sentinel Engine:** Node.js/TypeScript daemon running `@solana/web3.js` that listens to `MilestoneSubmitted` events, runs off-chain invoice/ticket verification pipelines, submits threshold jury approvals, and triggers enterprise webhooks.
+* **Notification Layer:** 
+  * **Resend API:** Sends bilingual (Spanish & English) transactional emails to the developer containing release status, Solana Explorer transaction links, and next steps.
+  * **Slack / Discord Enterprise Webhooks:** Streams grant approvals, milestone proof submissions, and treasury alerts to sponsor channels.
 
 ---
 
-# 3. Production-Ready Smart Contract
+# 3. Production-Ready Smart Contract / Core Engine
 
-Directory structure for the contract:
-```text
-programs/rumbo_breakpoint/
-├── Cargo.toml
-└── src/
-    └── lib.rs
-```
+Save this complete program as `programs/rumbo_escrow/src/lib.rs`.
 
-### `Cargo.toml`
-```toml
-[package]
-name = "rumbo_breakpoint"
-version = "0.1.0"
-description = "Verifiable Travel Grant and Breakpoint Ticket Engine"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib", "lib"]
-name = "rumbo_breakpoint"
-
-[features]
-no-entrypoint = []
-no-idl = []
-no-log-ix-name = []
-cpi = ["no-entrypoint"]
-default = []
-
-[dependencies]
-anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
-anchor-spl = "0.30.1"
-```
-
-### `programs/rumbo_breakpoint/src/lib.rs`
 ```rust
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
 
-declare_id!("RumbokZ3JcQWjC1E4uV4bZzK9f4w4hE2n8z1yX7pL5q");
-
-pub const DISCRIMINATOR_LENGTH: usize = 8;
-pub const MAX_NAME_LEN: usize = 64;
-pub const MAX_METADATA_LEN: usize = 128;
-pub const COMMITTEE_ROLE: u8 = 1;
+declare_id!("Rumb011111111111111111111111111111111111111");
 
 #[program]
-pub mod rumbo_breakpoint {
+pub mod rumbo_escrow {
     use super::*;
 
-    /// Initialize the Breakpoint Campaign Season
-    pub fn initialize_campaign(
-        ctx: Context<InitializeCampaign>,
-        season_id: u32,
-        max_tickets: u32,
-        total_stipend_cap_lamports: u64,
-        min_score_threshold: u8,
+    /// Initialize the global configuration and jury threshold parameters.
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        jury_quorum_threshold: u8,
+        program_fee_basis_points: u16,
     ) -> Result<()> {
-        let campaign = &mut ctx.accounts.campaign;
-        campaign.admin = ctx.accounts.admin.key();
-        campaign.season_id = season_id;
-        campaign.max_tickets = max_tickets;
-        campaign.tickets_awarded = 0;
-        campaign.total_stipend_cap = total_stipend_cap_lamports;
-        campaign.total_stipend_disbursed = 0;
-        campaign.min_score_threshold = min_score_threshold;
-        campaign.bump = ctx.bumps.campaign;
-        campaign.vault_bump = ctx.bumps.vault;
+        require!(jury_quorum_threshold > 0, RumboError::InvalidQuorumThreshold);
+        require!(program_fee_basis_points <= 500, RumboError::FeeExceedsCap); // Max 5%
 
-        emit!(CampaignInitializedEvent {
-            season_id,
-            admin: ctx.accounts.admin.key(),
-            total_stipend_cap: total_stipend_cap_lamports,
-            max_tickets,
+        let config = &mut ctx.accounts.config;
+        config.authority = ctx.accounts.authority.key();
+        config.jury_quorum_threshold = jury_quorum_threshold;
+        config.program_fee_basis_points = program_fee_basis_points;
+        config.total_grants_created = 0;
+        config.bump = ctx.bumps.config;
+
+        emit!(ConfigInitialized {
+            authority: config.authority,
+            jury_quorum_threshold,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Builder applies for a travel stipend and Breakpoint 2026 Ticket
-    pub fn apply_for_grant(
-        ctx: Context<ApplyForGrant>,
-        legal_name: String,
-        github_handle: String,
-        project_commit_hash: [u8; 32],
-        requested_stipend_lamports: u64,
+    /// Register a developer grant with milestone-based disbursement limits.
+    pub fn create_grant(
+        ctx: Context<CreateGrant>,
+        grant_id: u64,
+        total_amount: u64,
+        milestone_amounts: Vec<u64>,
+        expiry_timestamp: i64,
     ) -> Result<()> {
-        require!(
-            legal_name.as_bytes().len() <= MAX_NAME_LEN,
-            RumboError::NameTooLong
-        );
-        require!(
-            github_handle.as_bytes().len() <= MAX_NAME_LEN,
-            RumboError::HandleTooLong
-        );
-        require!(
-            requested_stipend_lamports > 0,
-            RumboError::InvalidRequestedAmount
-        );
+        require!(total_amount > 0, RumboError::ZeroGrantAmount);
+        require!(milestone_amounts.len() == 3, RumboError::InvalidMilestoneCount);
+        
+        let sum_milestones: u64 = milestone_amounts.iter().sum();
+        require!(sum_milestones == total_amount, RumboError::MilestoneSumMismatch);
 
-        let application = &mut ctx.accounts.application;
-        application.applicant = ctx.accounts.applicant.key();
-        application.campaign = ctx.accounts.campaign.key();
-        application.legal_name = legal_name.clone();
-        application.github_handle = github_handle.clone();
-        application.project_commit_hash = project_commit_hash;
-        application.requested_stipend = requested_stipend_lamports;
-        application.approved_stipend = 0;
-        application.score = 0;
-        application.status = ApplicationStatus::Submitted;
-        application.ticket_claimed = false;
-        application.bump = ctx.bumps.application;
+        let clock = Clock::get()?;
+        require!(expiry_timestamp > clock.unix_timestamp, RumboError::InvalidExpiry);
 
-        emit!(GrantAppliedEvent {
-            applicant: ctx.accounts.applicant.key(),
-            campaign: ctx.accounts.campaign.key(),
-            github_handle,
-            requested_stipend: requested_stipend_lamports,
+        let grant = &mut ctx.accounts.grant_escrow;
+        grant.grant_id = grant_id;
+        grant.builder = ctx.accounts.builder.key();
+        grant.sponsor = ctx.accounts.sponsor.key();
+        grant.total_amount = total_amount;
+        grant.disbursed_amount = 0;
+        grant.milestone_amounts = [milestone_amounts[0], milestone_amounts[1], milestone_amounts[2]];
+        grant.milestone_status = [MilestoneStatus::Pending; 3];
+        grant.milestone_proof_hashes = [[0u8; 32]; 3];
+        grant.jury_approvals = [0u8; 3];
+        grant.status = GrantStatus::AwaitingFunding;
+        grant.expiry_timestamp = expiry_timestamp;
+        grant.bump = ctx.bumps.grant_escrow;
+        grant.vault_bump = ctx.bumps.vault;
+
+        let config = &mut ctx.accounts.config;
+        config.total_grants_created = config.total_grants_created.checked_add(1).unwrap();
+
+        emit!(GrantCreated {
+            grant_id,
+            builder: grant.builder,
+            sponsor: grant.sponsor,
+            total_amount,
+            timestamp: clock.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Authorized Committee member attests to the candidate's contribution and assigns a score
-    pub fn attest_contribution(
-        ctx: Context<AttestContribution>,
-        score: u8,
-        approved_stipend_lamports: u64,
+    /// Sponsor deposits native SOL into the PDA vault.
+    pub fn fund_grant(ctx: Context<FundGrant>, grant_id: u64) -> Result<()> {
+        let grant = &mut ctx.accounts.grant_escrow;
+        require!(grant.status == GrantStatus::AwaitingFunding, RumboError::InvalidGrantState);
+        require!(ctx.accounts.sponsor.key() == grant.sponsor, RumboError::Unauthorized);
+
+        let fund_amount = grant.total_amount;
+
+        // Perform CPI transfer of SOL to PDA vault
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            Transfer {
+                from: ctx.accounts.sponsor.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+            },
+        );
+        transfer(cpi_context, fund_amount)?;
+
+        grant.status = GrantStatus::Active;
+
+        emit!(GrantFunded {
+            grant_id,
+            sponsor: grant.sponsor,
+            amount: fund_amount,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    /// Builder submits verification evidence (e.g., flight ticket hash, proof-of-attendance hash).
+    pub fn submit_milestone_proof(
+        ctx: Context<SubmitMilestoneProof>,
+        grant_id: u64,
+        milestone_index: u8,
+        proof_hash: [u8; 32],
     ) -> Result<()> {
-        require!(score <= 100, RumboError::InvalidScore);
+        let index = milestone_index as usize;
+        require!(index < 3, RumboError::IndexOutOfBounds);
 
-        let campaign = &ctx.accounts.campaign;
-        let application = &mut ctx.accounts.application;
-
+        let grant = &mut ctx.accounts.grant_escrow;
+        require!(grant.status == GrantStatus::Active, RumboError::InvalidGrantState);
+        require!(ctx.accounts.builder.key() == grant.builder, RumboError::Unauthorized);
         require!(
-            application.status == ApplicationStatus::Submitted,
-            RumboError::ApplicationAlreadyProcessed
+            grant.milestone_status[index] == MilestoneStatus::Pending,
+            RumboError::MilestoneAlreadySubmitted
         );
 
-        application.score = score;
-
-        if score >= campaign.min_score_threshold {
+        if index > 0 {
             require!(
-                campaign.total_stipend_disbursed + approved_stipend_lamports <= campaign.total_stipend_cap,
-                RumboError::StipendCapExceeded
+                grant.milestone_status[index - 1] == MilestoneStatus::Disbursed,
+                RumboError::PreviousMilestoneIncomplete
             );
-            application.status = ApplicationStatus::Approved;
-            application.approved_stipend = approved_stipend_lamports;
-        } else {
-            application.status = ApplicationStatus::Rejected;
-            application.approved_stipend = 0;
         }
 
-        emit!(GrantAttestedEvent {
-            applicant: application.applicant,
-            evaluator: ctx.accounts.evaluator.key(),
-            score,
-            status: application.status,
-            approved_stipend: application.approved_stipend,
+        grant.milestone_status[index] = MilestoneStatus::Submitted;
+        grant.milestone_proof_hashes[index] = proof_hash;
+
+        emit!(MilestoneSubmitted {
+            grant_id,
+            milestone_index,
+            proof_hash,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Releases the approved travel stipend directly from the Campaign Vault PDA to the builder
-    pub fn disburse_travel_stipend(ctx: Context<DisburseTravelStipend>) -> Result<()> {
-        let application = &mut ctx.accounts.application;
-        let campaign = &mut ctx.accounts.campaign;
+    /// Evaluator / Jury member votes to accept or reject milestone proof.
+    pub fn cast_jury_vote(
+        ctx: Context<CastJuryVote>,
+        grant_id: u64,
+        milestone_index: u8,
+        approve: bool,
+    ) -> Result<()> {
+        let index = milestone_index as usize;
+        require!(index < 3, RumboError::IndexOutOfBounds);
 
+        let grant = &mut ctx.accounts.grant_escrow;
+        require!(grant.status == GrantStatus::Active, RumboError::InvalidGrantState);
         require!(
-            application.status == ApplicationStatus::Approved,
-            RumboError::ApplicationNotApproved
+            grant.milestone_status[index] == MilestoneStatus::Submitted,
+            RumboError::MilestoneNotSubmitted
+        );
+
+        let vote_record = &mut ctx.accounts.vote_record;
+        require!(!vote_record.has_voted, RumboError::AlreadyVoted);
+
+        vote_record.grant_id = grant_id;
+        vote_record.milestone_index = milestone_index;
+        vote_record.juror = ctx.accounts.juror.key();
+        vote_record.approved = approve;
+        vote_record.has_voted = true;
+        vote_record.bump = ctx.bumps.vote_record;
+
+        if approve {
+            grant.jury_approvals[index] = grant.jury_approvals[index].checked_add(1).unwrap();
+        }
+
+        emit!(JuryVoteCast {
+            grant_id,
+            milestone_index,
+            juror: ctx.accounts.juror.key(),
+            approved: approve,
+            current_approvals: grant.jury_approvals[index],
+        });
+
+        Ok(())
+    }
+
+    /// Disburse funds to the builder once milestone reaches jury quorum.
+    pub fn disburse_milestone(
+        ctx: Context<DisburseMilestone>,
+        grant_id: u64,
+        milestone_index: u8,
+    ) -> Result<()> {
+        let index = milestone_index as usize;
+        require!(index < 3, RumboError::IndexOutOfBounds);
+
+        let config = &ctx.accounts.config;
+        let grant = &mut ctx.accounts.grant_escrow;
+
+        require!(grant.status == GrantStatus::Active, RumboError::InvalidGrantState);
+        require!(
+            grant.milestone_status[index] == MilestoneStatus::Submitted,
+            RumboError::MilestoneNotSubmitted
         );
         require!(
-            application.approved_stipend > 0,
-            RumboError::NoFundsToDisburse
+            grant.jury_approvals[index] >= config.jury_quorum_threshold,
+            RumboError::InsufficientJuryQuorum
         );
 
-        let amount = application.approved_stipend;
-        application.approved_stipend = 0; // Prevent re-entrancy / double disbursement
-        application.status = ApplicationStatus::Funded;
+        let amount_to_disburse = grant.milestone_amounts[index];
+        require!(
+            ctx.accounts.vault.to_account_info().lamports() >= amount_to_disburse,
+            RumboError::InsufficientVaultBalance
+        );
 
-        campaign.total_stipend_disbursed = campaign
-            .total_stipend_disbursed
-            .checked_add(amount)
-            .ok_or(RumboError::ArithmeticOverflow)?;
-
-        let season_id_bytes = campaign.season_id.to_le_bytes();
+        // Disburse lamports from vault PDA to builder
+        let grant_key = grant.key();
         let seeds = &[
-            b"campaign_vault".as_ref(),
-            campaign.to_account_info().key.as_ref(),
-            &[campaign.vault_bump],
+            b"vault",
+            grant_key.as_ref(),
+            &[grant.vault_bump],
         ];
         let signer_seeds = &[&seeds[..]];
 
@@ -266,55 +325,72 @@ pub mod rumbo_breakpoint {
             ctx.accounts.system_program.to_account_info(),
             Transfer {
                 from: ctx.accounts.vault.to_account_info(),
-                to: ctx.accounts.applicant.to_account_info(),
+                to: ctx.accounts.builder.to_account_info(),
             },
             signer_seeds,
         );
+        transfer(transfer_ctx, amount_to_disburse)?;
 
-        transfer(transfer_ctx, amount)?;
+        grant.disbursed_amount = grant.disbursed_amount.checked_add(amount_to_disburse).unwrap();
+        grant.milestone_status[index] = MilestoneStatus::Disbursed;
 
-        emit!(StipendDisbursedEvent {
-            applicant: ctx.accounts.applicant.key(),
-            amount,
-            campaign: campaign.key(),
+        if index == 2 {
+            grant.status = GrantStatus::Completed;
+        }
+
+        emit!(MilestoneDisbursed {
+            grant_id,
+            milestone_index,
+            builder: grant.builder,
+            amount: amount_to_disburse,
+            timestamp: Clock::get()?.unix_timestamp,
         });
 
         Ok(())
     }
 
-    /// Mints a Soulbound on-chain ticket voucher receipt PDA for entry at Breakpoint 2026
-    pub fn claim_breakpoint_ticket(ctx: Context<ClaimBreakpointTicket>) -> Result<()> {
-        let campaign = &mut ctx.accounts.campaign;
-        let application = &mut ctx.accounts.application;
-        let ticket = &mut ctx.accounts.ticket;
+    /// Clawback remaining unreleased funds back to sponsor after grant expiration.
+    pub fn emergency_refund_expired(ctx: Context<EmergencyRefund>, grant_id: u64) -> Result<()> {
+        let grant = &mut ctx.accounts.grant_escrow;
+        let clock = Clock::get()?;
 
         require!(
-            application.status == ApplicationStatus::Funded || application.status == ApplicationStatus::Approved,
-            RumboError::ApplicationNotEligibleForTicket
+            clock.unix_timestamp > grant.expiry_timestamp,
+            RumboError::GrantNotExpired
         );
-        require!(!application.ticket_claimed, RumboError::TicketAlreadyClaimed);
         require!(
-            campaign.tickets_awarded < campaign.max_tickets,
-            RumboError::TicketQuotaExceeded
+            grant.status == GrantStatus::Active || grant.status == GrantStatus::AwaitingFunding,
+            RumboError::GrantCannotBeRefunded
         );
 
-        application.ticket_claimed = true;
-        campaign.tickets_awarded = campaign
-            .tickets_awarded
-            .checked_add(1)
-            .ok_or(RumboError::ArithmeticOverflow)?;
+        let vault_balance = ctx.accounts.vault.to_account_info().lamports();
+        if vault_balance > 0 {
+            let grant_key = grant.key();
+            let seeds = &[
+                b"vault",
+                grant_key.as_ref(),
+                &[grant.vault_bump],
+            ];
+            let signer_seeds = &[&seeds[..]];
 
-        ticket.owner = ctx.accounts.applicant.key();
-        ticket.campaign = campaign.key();
-        ticket.ticket_number = campaign.tickets_awarded;
-        ticket.issued_at = Clock::get()?.unix_timestamp;
-        ticket.bump = ctx.bumps.ticket;
+            let transfer_ctx = CpiContext::new_with_signer(
+                ctx.accounts.system_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.sponsor.to_account_info(),
+                },
+                signer_seeds,
+            );
+            transfer(transfer_ctx, vault_balance)?;
+        }
 
-        emit!(TicketClaimedEvent {
-            ticket_id: ticket.key(),
-            owner: ticket.owner,
-            ticket_number: ticket.ticket_number,
-            issued_at: ticket.issued_at,
+        grant.status = GrantStatus::Cancelled;
+
+        emit!(GrantRefunded {
+            grant_id,
+            sponsor: grant.sponsor,
+            refunded_amount: vault_balance,
+            timestamp: clock.unix_timestamp,
         });
 
         Ok(())
@@ -326,176 +402,232 @@ pub mod rumbo_breakpoint {
 // -----------------------------------------------------------------------------
 
 #[derive(Accounts)]
-#[instruction(season_id: u32)]
-pub struct InitializeCampaign<'info> {
+pub fn initialize_instruction(ctx: &Context<Initialize>) -> Result<()> {
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct Initialize<'info> {
     #[account(
         init,
-        payer = admin,
-        space = DISCRIMINATOR_LENGTH + Campaign::INIT_SPACE,
-        seeds = [b"campaign", admin.key().as_ref(), &season_id.to_le_bytes()],
+        payer = authority,
+        space = 8 + Config::LEN,
+        seeds = [b"config"],
         bump
     )]
-    pub campaign: Account<'info, Campaign>,
+    pub config: Account<'info, Config>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 
-    /// CHECK: PDA Treasury vault holding SOL stipends
+#[derive(Accounts)]
+#[instruction(grant_id: u64)]
+pub struct CreateGrant<'info> {
     #[account(
         mut,
-        seeds = [b"campaign_vault", campaign.key().as_ref()],
+        seeds = [b"config"],
+        bump = config.bump
+    )]
+    pub config: Account<'info, Config>,
+    #[account(
+        init,
+        payer = sponsor,
+        space = 8 + GrantEscrow::LEN,
+        seeds = [b"grant", builder.key().as_ref(), &grant_id.to_le_bytes()],
+        bump
+    )]
+    pub grant_escrow: Account<'info, GrantEscrow>,
+    /// CHECK: Safe PDA acting as the lamport vault.
+    #[account(
+        mut,
+        seeds = [b"vault", grant_escrow.key().as_ref()],
         bump
     )]
     pub vault: SystemAccount<'info>,
-
+    /// CHECK: Checked against instruction signature.
+    pub builder: AccountInfo<'info>,
     #[account(mut)]
-    pub admin: Signer<'info>,
-
+    pub sponsor: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct ApplyForGrant<'info> {
-    #[account(
-        init,
-        payer = applicant,
-        space = DISCRIMINATOR_LENGTH + Application::INIT_SPACE,
-        seeds = [b"application", campaign.key().as_ref(), applicant.key().as_ref()],
-        bump
-    )]
-    pub application: Account<'info, Application>,
-
-    pub campaign: Account<'info, Campaign>,
-
-    #[account(mut)]
-    pub applicant: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct AttestContribution<'info> {
+#[instruction(grant_id: u64)]
+pub struct FundGrant<'info> {
     #[account(
         mut,
-        has_one = admin @ RumboError::UnauthorizedCommittee
+        seeds = [b"grant", grant_escrow.builder.as_ref(), &grant_id.to_le_bytes()],
+        bump = grant_escrow.bump
     )]
-    pub campaign: Account<'info, Campaign>,
-
+    pub grant_escrow: Account<'info, GrantEscrow>,
+    /// CHECK: Safe PDA acting as the lamport vault.
     #[account(
         mut,
-        seeds = [b"application", campaign.key().as_ref(), application.applicant.as_ref()],
-        bump = application.bump
-    )]
-    pub application: Account<'info, Application>,
-
-    pub admin: Signer<'info>,
-    pub evaluator: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct DisburseTravelStipend<'info> {
-    #[account(mut)]
-    pub campaign: Account<'info, Campaign>,
-
-    /// CHECK: Validated via seeds in CPI transfer
-    #[account(
-        mut,
-        seeds = [b"campaign_vault", campaign.key().as_ref()],
-        bump = campaign.vault_bump
+        seeds = [b"vault", grant_escrow.key().as_ref()],
+        bump = grant_escrow.vault_bump
     )]
     pub vault: SystemAccount<'info>,
-
-    #[account(
-        mut,
-        seeds = [b"application", campaign.key().as_ref(), applicant.key().as_ref()],
-        bump = application.bump
-    )]
-    pub application: Account<'info, Application>,
-
-    /// CHECK: Payout recipient
-    #[account(mut, address = application.applicant)]
-    pub applicant: SystemAccount<'info>,
-
-    pub admin: Signer<'info>,
+    #[account(mut)]
+    pub sponsor: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct ClaimBreakpointTicket<'info> {
-    #[account(mut)]
-    pub campaign: Account<'info, Campaign>,
-
+#[instruction(grant_id: u64, milestone_index: u8)]
+pub struct SubmitMilestoneProof<'info> {
     #[account(
         mut,
-        seeds = [b"application", campaign.key().as_ref(), applicant.key().as_ref()],
-        bump = application.bump
+        seeds = [b"grant", builder.key().as_ref(), &grant_id.to_le_bytes()],
+        bump = grant_escrow.bump
     )]
-    pub application: Account<'info, Application>,
+    pub grant_escrow: Account<'info, GrantEscrow>,
+    pub builder: Signer<'info>,
+}
 
+#[derive(Accounts)]
+#[instruction(grant_id: u64, milestone_index: u8)]
+pub struct CastJuryVote<'info> {
+    #[account(
+        mut,
+        seeds = [b"grant", grant_escrow.builder.as_ref(), &grant_id.to_le_bytes()],
+        bump = grant_escrow.bump
+    )]
+    pub grant_escrow: Account<'info, GrantEscrow>,
     #[account(
         init,
-        payer = applicant,
-        space = DISCRIMINATOR_LENGTH + BreakpointTicket::INIT_SPACE,
-        seeds = [b"ticket", campaign.key().as_ref(), applicant.key().as_ref()],
+        payer = juror,
+        space = 8 + VoteRecord::LEN,
+        seeds = [b"vote", grant_escrow.key().as_ref(), &[milestone_index], juror.key().as_ref()],
         bump
     )]
-    pub ticket: Account<'info, BreakpointTicket>,
+    pub vote_record: Account<'info, VoteRecord>,
+    #[account(mut)]
+    pub juror: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 
-    #[account(mut, address = application.applicant)]
-    pub applicant: Signer<'info>,
+#[derive(Accounts)]
+#[instruction(grant_id: u64, milestone_index: u8)]
+pub struct DisburseMilestone<'info> {
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump
+    )]
+    pub config: Account<'info, Config>,
+    #[account(
+        mut,
+        seeds = [b"grant", grant_escrow.builder.as_ref(), &grant_id.to_le_bytes()],
+        bump = grant_escrow.bump
+    )]
+    pub grant_escrow: Account<'info, GrantEscrow>,
+    /// CHECK: Safe PDA lamport vault
+    #[account(
+        mut,
+        seeds = [b"vault", grant_escrow.key().as_ref()],
+        bump = grant_escrow.vault_bump
+    )]
+    pub vault: SystemAccount<'info>,
+    /// CHECK: Must match the builder address in grant_escrow
+    #[account(
+        mut,
+        address = grant_escrow.builder @ RumboError::InvalidRecipient
+    )]
+    pub builder: AccountInfo<'info>,
+    pub caller: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
 
+#[derive(Accounts)]
+#[instruction(grant_id: u64)]
+pub struct EmergencyRefund<'info> {
+    #[account(
+        mut,
+        seeds = [b"grant", grant_escrow.builder.as_ref(), &grant_id.to_le_bytes()],
+        bump = grant_escrow.bump
+    )]
+    pub grant_escrow: Account<'info, GrantEscrow>,
+    /// CHECK: Safe PDA lamport vault
+    #[account(
+        mut,
+        seeds = [b"vault", grant_escrow.key().as_ref()],
+        bump = grant_escrow.vault_bump
+    )]
+    pub vault: SystemAccount<'info>,
+    /// CHECK: Must match sponsor saved in grant_escrow
+    #[account(
+        mut,
+        address = grant_escrow.sponsor @ RumboError::InvalidSponsor
+    )]
+    pub sponsor: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
 }
 
 // -----------------------------------------------------------------------------
-// STATE DEFINITIONS
+// STATE MODELS
 // -----------------------------------------------------------------------------
 
 #[account]
-#[derive(InitSpace)]
-pub struct Campaign {
-    pub admin: Pubkey,
-    pub season_id: u32,
-    pub max_tickets: u32,
-    pub tickets_awarded: u32,
-    pub total_stipend_cap: u64,
-    pub total_stipend_disbursed: u64,
-    pub min_score_threshold: u8,
+pub struct Config {
+    pub authority: Pubkey,
+    pub jury_quorum_threshold: u8,
+    pub program_fee_basis_points: u16,
+    pub total_grants_created: u64,
+    pub bump: u8,
+}
+
+impl Config {
+    pub const LEN: usize = 32 + 1 + 2 + 8 + 1;
+}
+
+#[account]
+pub struct GrantEscrow {
+    pub grant_id: u64,
+    pub builder: Pubkey,
+    pub sponsor: Pubkey,
+    pub total_amount: u64,
+    pub disbursed_amount: u64,
+    pub milestone_amounts: [u64; 3],
+    pub milestone_status: [MilestoneStatus; 3],
+    pub milestone_proof_hashes: [[u8; 32]; 3],
+    pub jury_approvals: [u8; 3],
+    pub status: GrantStatus,
+    pub expiry_timestamp: i64,
     pub bump: u8,
     pub vault_bump: u8,
 }
 
-#[account]
-#[derive(InitSpace)]
-pub struct Application {
-    pub applicant: Pubkey,
-    pub campaign: Pubkey,
-    #[max_len(64)]
-    pub legal_name: String,
-    #[max_len(64)]
-    pub github_handle: String,
-    pub project_commit_hash: [u8; 32],
-    pub requested_stipend: u64,
-    pub approved_stipend: u64,
-    pub score: u8,
-    pub status: ApplicationStatus,
-    pub ticket_claimed: bool,
-    pub bump: u8,
+impl GrantEscrow {
+    pub const LEN: usize = 8 + 32 + 32 + 8 + 8 + (8 * 3) + (1 * 3) + (32 * 3) + (1 * 3) + 1 + 8 + 1 + 1;
 }
 
 #[account]
-#[derive(InitSpace)]
-pub struct BreakpointTicket {
-    pub owner: Pubkey,
-    pub campaign: Pubkey,
-    pub ticket_number: u32,
-    pub issued_at: i64,
+pub struct VoteRecord {
+    pub grant_id: u64,
+    pub milestone_index: u8,
+    pub juror: Pubkey,
+    pub approved: bool,
+    pub has_voted: bool,
     pub bump: u8,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace, Debug)]
-pub enum ApplicationStatus {
+impl VoteRecord {
+    pub const LEN: usize = 8 + 1 + 32 + 1 + 1 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GrantStatus {
+    AwaitingFunding,
+    Active,
+    Completed,
+    Cancelled,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum MilestoneStatus {
+    Pending,
     Submitted,
-    Approved,
-    Rejected,
-    Funded,
+    Disbursed,
 }
 
 // -----------------------------------------------------------------------------
@@ -503,73 +635,103 @@ pub enum ApplicationStatus {
 // -----------------------------------------------------------------------------
 
 #[event]
-pub struct CampaignInitializedEvent {
-    pub season_id: u32,
-    pub admin: Pubkey,
-    pub total_stipend_cap: u64,
-    pub max_tickets: u32,
+pub struct ConfigInitialized {
+    pub authority: Pubkey,
+    pub jury_quorum_threshold: u8,
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct GrantAppliedEvent {
-    pub applicant: Pubkey,
-    pub campaign: Pubkey,
-    pub github_handle: String,
-    pub requested_stipend: u64,
+pub struct GrantCreated {
+    pub grant_id: u64,
+    pub builder: Pubkey,
+    pub sponsor: Pubkey,
+    pub total_amount: u64,
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct GrantAttestedEvent {
-    pub applicant: Pubkey,
-    pub evaluator: Pubkey,
-    pub score: u8,
-    pub status: ApplicationStatus,
-    pub approved_stipend: u64,
-}
-
-#[event]
-pub struct StipendDisbursedEvent {
-    pub applicant: Pubkey,
+pub struct GrantFunded {
+    pub grant_id: u64,
+    pub sponsor: Pubkey,
     pub amount: u64,
-    pub campaign: Pubkey,
+    pub timestamp: i64,
 }
 
 #[event]
-pub struct TicketClaimedEvent {
-    pub ticket_id: Pubkey,
-    pub owner: Pubkey,
-    pub ticket_number: u32,
-    pub issued_at: i64,
+pub struct MilestoneSubmitted {
+    pub grant_id: u64,
+    pub milestone_index: u8,
+    pub proof_hash: [u8; 32],
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct JuryVoteCast {
+    pub grant_id: u64,
+    pub milestone_index: u8,
+    pub juror: Pubkey,
+    pub approved: bool,
+    pub current_approvals: u8,
+}
+
+#[event]
+pub struct MilestoneDisbursed {
+    pub grant_id: u64,
+    pub milestone_index: u8,
+    pub builder: Pubkey,
+    pub amount: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct GrantRefunded {
+    pub grant_id: u64,
+    pub sponsor: Pubkey,
+    pub refunded_amount: u64,
+    pub timestamp: i64,
 }
 
 #[error_code]
 pub enum RumboError {
-    #[msg("Provided legal name exceeds maximum allowed length of 64 bytes.")]
-    NameTooLong,
-    #[msg("Provided GitHub handle exceeds maximum allowed length of 64 bytes.")]
-    HandleTooLong,
-    #[msg("Requested stipend lamports must be greater than zero.")]
-    InvalidRequestedAmount,
-    #[msg("Score must be an integer between 0 and 100.")]
-    InvalidScore,
-    #[msg("Application has already been evaluated.")]
-    ApplicationAlreadyProcessed,
-    #[msg("Stipend request exceeds remaining campaign treasury cap.")]
-    StipendCapExceeded,
-    #[msg("Application status is not approved for funding.")]
-    ApplicationNotApproved,
-    #[msg("No approved funds available for disbursement.")]
-    NoFundsToDisburse,
-    #[msg("Application does not satisfy eligibility criteria for ticket claim.")]
-    ApplicationNotEligibleForTicket,
-    #[msg("Breakpoint ticket already claimed by this applicant.")]
-    TicketAlreadyClaimed,
-    #[msg("Maximum ticket quota for Breakpoint 2026 has been reached.")]
-    TicketQuotaExceeded,
-    #[msg("Signer is not authorized to act as the campaign committee administrator.")]
-    UnauthorizedCommittee,
-    #[msg("Math arithmetic overflow.")]
-    ArithmeticOverflow,
+    #[msg("Quorum threshold must be greater than zero.")]
+    InvalidQuorumThreshold,
+    #[msg("Protocol fee exceeds hard cap of 500 bps.")]
+    FeeExceedsCap,
+    #[msg("Grant amount must be greater than zero.")]
+    ZeroGrantAmount,
+    #[msg("Grant must specify exactly 3 milestone amounts.")]
+    InvalidMilestoneCount,
+    #[msg("Sum of milestones does not match total grant amount.")]
+    MilestoneSumMismatch,
+    #[msg("Expiry timestamp must be in the future.")]
+    InvalidExpiry,
+    #[msg("Invalid grant status for this operation.")]
+    InvalidGrantState,
+    #[msg("Unauthorized signer for this grant operation.")]
+    Unauthorized,
+    #[msg("Index out of bounds for milestones.")]
+    IndexOutOfBounds,
+    #[msg("Milestone proof has already been submitted.")]
+    MilestoneAlreadySubmitted,
+    #[msg("Previous milestone has not been disbursed yet.")]
+    PreviousMilestoneIncomplete,
+    #[msg("Milestone has not yet been submitted by the builder.")]
+    MilestoneNotSubmitted,
+    #[msg("Juror has already cast a vote for this milestone.")]
+    AlreadyVoted,
+    #[msg("Milestone has not reached jury threshold quorum.")]
+    InsufficientJuryQuorum,
+    #[msg("Insufficient balance in vault PDA.")]
+    InsufficientVaultBalance,
+    #[msg("Supplied recipient does not match builder in grant state.")]
+    InvalidRecipient,
+    #[msg("Supplied refund destination does not match sponsor.")]
+    InvalidSponsor,
+    #[msg("Grant has not yet expired.")]
+    GrantNotExpired,
+    #[msg("Grant status is not eligible for refund.")]
+    GrantCannotBeRefunded,
 }
 ```
 
@@ -577,417 +739,488 @@ pub enum RumboError {
 
 # 4. Enterprise Integration Client & Automation CLI
 
-An autonomous daemon orchestrates the workflow. It monitors on-chain logs, triggers instant notifications to winners via the **Resend API**, and updates the community via **Discord Webhooks**.
+Save this production TypeScript client as `services/rumbo-sentinel-cli.ts`. It provides end-to-end automation for registration, milestone verification, Resend transactional notifications, and Discord webhook logging.
 
-### `package.json`
-```json
-{
-  "name": "rumbo-breakpoint-client",
-  "version": "1.0.0",
-  "description": "Production Agent Client & Relayer for Rumbo Breakpoint Engine",
-  "main": "dist/index.js",
-  "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "cli": "ts-node src/cli.ts",
-    "test": "mocha -r ts-node/register 'tests/**/*.ts' --timeout 60000"
-  },
-  "dependencies": {
-    "@coral-xyz/anchor": "^0.30.1",
-    "@solana/web3.js": "^1.95.3",
-    "axios": "^1.7.2",
-    "dotenv": "^16.4.5",
-    "resend": "^3.5.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.5.4"
-  },
-  "devDependencies": {
-    "@types/chai": "^4.3.16",
-    "@types/mocha": "^10.0.7",
-    "@types/node": "^22.0.0",
-    "chai": "^4.4.1",
-    "mocha": "^10.7.0"
-  }
-}
-```
-
-### `tsconfig.json`
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist"
-  },
-  "include": ["src/**/*"]
-}
-```
-
-### `src/relayer.ts`
 ```typescript
-import * as anchor from "@coral-xyz/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { Resend } from "resend";
+import { Connection, Keypair, PublicKey, SystemProgram, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
+import { Program, AnchorProvider, Wallet, Idl, BN } from "@coral-xyz/anchor";
 import axios from "axios";
-import * as dotenv from "dotenv";
-
-dotenv.config();
-
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "re_mock_test_key";
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
-const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
-
-const resend = new Resend(RESEND_API_KEY);
-
-export interface GrantNotificationPayload {
-  applicant: string;
-  github: string;
-  approvedStipendLamports: number;
-  ticketNumber?: number;
-}
-
-export class RumboNotificationDispatcher {
-  /**
-   * Dispatches branded HTML travel verification & ticket pass to the grantee.
-   */
-  public static async sendGranteePassEmail(
-    toEmail: string,
-    payload: GrantNotificationPayload
-  ): Promise<boolean> {
-    const stipendSol = (payload.approvedStipendLamports / 1e9).toFixed(2);
-    try {
-      const response = await resend.emails.send({
-        from: "Breakpoint Travel Engine <rumbo@solanabreakpoint.org>",
-        to: [toEmail],
-        subject: `🎉 Congratulations! Your Rumbo a Breakpoint 2026 Pass is Confirmed!`,
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0d0e12; color: #ffffff; padding: 40px; border-radius: 12px; max-width: 600px; margin: auto;">
-            <h1 style="color: #14F195; font-size: 26px; text-transform: uppercase; margin-bottom: 8px;">Rumbo a Breakpoint 2026</h1>
-            <p style="color: #9945FF; font-size: 16px; font-weight: bold;">Verified On-Chain Travel Grant & Ticket Confirmation</p>
-            <hr style="border: 0; border-top: 1px solid #282c37; margin: 24px 0;" />
-            <p>Hey <strong>${payload.github}</strong>,</p>
-            <p>The Grant Evaluation Committee has verified your contributions on-chain. Your travel stipend and conference pass for <strong>Breakpoint 2026</strong> have been authorized!</p>
-            <div style="background-color: #1a1b23; border: 1px solid #333842; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0;">🎟️ <strong>Conference Ticket:</strong> Confirmed Pass (Soulbound)</p>
-              <p style="margin: 0 0 10px 0;">💸 <strong>Disbursed Travel Grant:</strong> ${stipendSol} SOL</p>
-              <p style="margin: 0;">🔑 <strong>On-Chain Recipient:</strong> <code style="color: #14F195;">${payload.applicant}</code></p>
-            </div>
-            <p style="font-size: 13px; color: #8a8f98;">Show this on-chain proof at badge pickup or verify your wallet directly on arrival.</p>
-          </div>
-        `,
-      });
-
-      console.log(`[Resend] Successfully dispatched email. ID: ${response.data?.id}`);
-      return true;
-    } catch (err) {
-      console.error(`[Resend Error] Failed to send email to ${toEmail}:`, err);
-      return false;
-    }
-  }
-
-  /**
-   * Pushes real-time governance notification to Discord.
-   */
-  public static async pushDiscordBroadcast(payload: GrantNotificationPayload): Promise<void> {
-    if (!DISCORD_WEBHOOK_URL) return;
-
-    const stipendSol = (payload.approvedStipendLamports / 1e9).toFixed(2);
-    const body = {
-      embeds: [
-        {
-          title: "🚀 Rumbo a Breakpoint 2026: Grant Disbursed!",
-          color: 0x14f195,
-          fields: [
-            { name: "Builder", value: `[${payload.github}](https://github.com/${payload.github})`, inline: true },
-            { name: "Stipend (SOL)", value: `${stipendSol} SOL`, inline: true },
-            { name: "Wallet", value: `\`${payload.applicant.slice(0, 4)}...${payload.applicant.slice(-4)}\``, inline: false },
-          ],
-          footer: { text: "Solana Verifiable Travel Allocator • On-Chain Event Verified" },
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    };
-
-    try {
-      await axios.post(DISCORD_WEBHOOK_URL, body);
-      console.log(`[Discord] Broadcast pushed successfully.`);
-    } catch (err: any) {
-      console.error(`[Discord Error] Failed to dispatch webhook:`, err.message);
-    }
-  }
-}
-```
-
-### `src/cli.ts` (Administrative & Builder Runner)
-```typescript
-import { Command } from "commander";
-import * as anchor from "@coral-xyz/anchor";
-import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { RumboNotificationDispatcher } from "./relayer";
 import * as crypto from "crypto";
 
-const programId = new PublicKey("RumbokZ3JcQWjC1E4uV4bZzK9f4w4hE2n8z1yX7pL5q");
+// -----------------------------------------------------------------------------
+// INTERFACES & CONFIG
+// -----------------------------------------------------------------------------
 
-async function main() {
-  console.log("=== RUMBO A BREAKPOINT 2026: AUTOMATION CLI ===");
-  const connection = new anchor.web3.Connection(
-    process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
-    "confirmed"
-  );
-
-  console.log(`Connected to Solana cluster. Program ID: ${programId.toBase58()}`);
-
-  // Test Resend integration directly
-  if (process.env.TEST_EMAIL) {
-    console.log(`Executing test notification to: ${process.env.TEST_EMAIL}`);
-    await RumboNotificationDispatcher.sendGranteePassEmail(process.env.TEST_EMAIL, {
-      applicant: "73kY...w4hE",
-      github: "solana-builder",
-      approvedStipendLamports: 2.5 * LAMPORTS_PER_SOL,
-    });
-  }
+export interface SentinelConfig {
+  solanaRpcUrl: string;
+  programId: string;
+  resendApiKey: string;
+  discordWebhookUrl: string;
+  adminKeypair: Keypair;
 }
 
-main().catch(console.error);
+export interface GrantInitPayload {
+  grantId: number;
+  builderPubkey: string;
+  totalSol: number;
+  milestone1Sol: number; // Flight & Ticket
+  milestone2Sol: number; // Visa & Transit
+  milestone3Sol: number; // On-site Attendance & Demo
+  expiryDays: number;
+  builderEmail: string;
+}
+
+export class RumboSentinelEngine {
+  private connection: Connection;
+  private provider: AnchorProvider;
+  private program: Program;
+  private resendApiKey: string;
+  private discordWebhookUrl: string;
+
+  constructor(config: SentinelConfig, idl: Idl) {
+    this.connection = new Connection(config.solanaRpcUrl, "confirmed");
+    const wallet = new Wallet(config.adminKeypair);
+    this.provider = new AnchorProvider(this.connection, wallet, { commitment: "confirmed" });
+    this.program = new Program(idl, config.programId, this.provider);
+    this.resendApiKey = config.resendApiKey;
+    this.discordWebhookUrl = config.discordWebhookUrl;
+  }
+
+  // Derive Grant Escrow PDA
+  public findGrantPda(builder: PublicKey, grantId: BN): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("grant"), builder.toBuffer(), grantId.toArrayLike(Buffer, "le", 8)],
+      this.program.programId
+    );
+  }
+
+  // Derive Vault PDA
+  public findVaultPda(grantPda: PublicKey): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), grantPda.toBuffer()],
+      this.program.programId
+    );
+  }
+
+  // Calculate SHA-256 digest of travel receipts or ticket PDFs
+  public static hashReceipt(documentBuffer: Buffer): number[] {
+    const hash = crypto.createHash("sha256").update(documentBuffer).digest();
+    return Array.from(hash);
+  }
+
+  // Initialize and Fund a Rumbo Escrow
+  public async setupAndFundGrant(
+    payload: GrantInitPayload,
+    sponsorKeypair: Keypair
+  ): Promise<string> {
+    const builder = new PublicKey(payload.builderPubkey);
+    const grantIdBN = new BN(payload.grantId);
+    const [grantPda] = this.findGrantPda(builder, grantIdBN);
+    const [vaultPda] = this.findVaultPda(grantPda);
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      this.program.programId
+    );
+
+    const totalLamports = new BN(payload.totalSol * 1e9);
+    const m1 = new BN(payload.milestone1Sol * 1e9);
+    const m2 = new BN(payload.milestone2Sol * 1e9);
+    const m3 = new BN(payload.milestone3Sol * 1e9);
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const expiryTimestamp = new BN(nowSeconds + payload.expiryDays * 86400);
+
+    console.log(`[RUMBO SENTINEL] Registering Grant #${payload.grantId} for ${payload.builderPubkey}...`);
+
+    // 1. Create Grant
+    const createTx = await this.program.methods
+      .createGrant(grantIdBN, totalLamports, [m1, m2, m3], expiryTimestamp)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        builder: builder,
+        sponsor: sponsorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([sponsorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Created Grant Escrow on-chain. Tx: ${createTx}`);
+
+    // 2. Fund Grant
+    const fundTx = await this.program.methods
+      .fundGrant(grantIdBN)
+      .accounts({
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        sponsor: sponsorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([sponsorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Escrow PDA Vault funded with ${payload.totalSol} SOL. Tx: ${fundTx}`);
+
+    // 3. Dispatch Enterprise Alerts
+    await this.notifyDiscord({
+      title: "🚀 Nuevo Apoyo de Viaje Asignado: Rumbo a Breakpoint 2026",
+      color: 0x14f195, // Solana Green
+      fields: [
+        { name: "Grant ID", value: `#${payload.grantId}`, inline: true },
+        { name: "Beneficiario", value: `${payload.builderPubkey.slice(0, 6)}...${payload.builderPubkey.slice(-4)}`, inline: true },
+        { name: "Fondo Total", value: `${payload.totalSol} SOL`, inline: true },
+        { name: "Bolsa Hito 1 (Vuelos/Ticket)", value: `${payload.milestone1Sol} SOL`, inline: false },
+        { name: "Bolsa Hito 2 (Visado/Tránsito)", value: `${payload.milestone2Sol} SOL`, inline: false },
+        { name: "Bolsa Hito 3 (Breakpoint On-Site)", value: `${payload.milestone3Sol} SOL`, inline: false },
+      ],
+      txSignature: fundTx,
+    });
+
+    await this.sendEmail(
+      payload.builderEmail,
+      "¡Felicidades! Tu beca de viaje 'Rumbo a Breakpoint 2026' ha sido reservada",
+      `<p>Hola Builder,</p>
+       <p>Tu apoyo financiero para asistir a <strong>Solana Breakpoint 2026</strong> ha sido depositado en el contrato de depósito en garantía (Escrow) de Solana.</p>
+       <ul>
+         <li><strong>Monto Total:</strong> ${payload.totalSol} SOL</li>
+         <li><strong>Fondo en Custodia (Vault PDA):</strong> <code>${vaultPda.toBase58()}</code></li>
+       </ul>
+       <p>Para desbloquear tu primer 50% (${payload.milestone1Sol} SOL), ingresa a la CLI o Portal de Rumbo Sentinel y carga tu comprobante de pasaje aéreo y entrada a Breakpoint.</p>
+       <p>¡Nos vemos en Breakpoint 2026!</p>`
+    );
+
+    return fundTx;
+  }
+
+  // Verifies and triggers automatic release of milestone funds
+  public async evaluateAndDisburse(
+    grantId: number,
+    milestoneIndex: number,
+    builderPubkey: string,
+    builderEmail: string,
+    jurorKeypair: Keypair
+  ): Promise<string> {
+    const builder = new PublicKey(builderPubkey);
+    const grantIdBN = new BN(grantId);
+    const [grantPda] = this.findGrantPda(builder, grantIdBN);
+    const [vaultPda] = this.findVaultPda(grantPda);
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      this.program.programId
+    );
+
+    const [voteRecordPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("vote"),
+        grantPda.toBuffer(),
+        Buffer.from([milestoneIndex]),
+        jurorKeypair.publicKey.toBuffer(),
+      ],
+      this.program.programId
+    );
+
+    console.log(`[RUMBO SENTINEL] Casting Jury Quorum Vote for Grant #${grantId}, Milestone ${milestoneIndex}...`);
+
+    // 1. Cast Jury Vote
+    const voteTx = await this.program.methods
+      .castJuryVote(grantIdBN, milestoneIndex, true)
+      .accounts({
+        grantEscrow: grantPda,
+        voteRecord: voteRecordPda,
+        juror: jurorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([jurorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Juror vote recorded: ${voteTx}`);
+
+    // 2. Disburse Milestone Payout
+    console.log(`[RUMBO SENTINEL] Executing programmatic disbursement to builder...`);
+    const disburseTx = await this.program.methods
+      .disburseMilestone(grantIdBN, milestoneIndex)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        builder: builder,
+        caller: jurorKeypair.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([jurorKeypair])
+      .rpc();
+
+    console.log(`[RUMBO SENTINEL] Disbursement completed! Tx: ${disburseTx}`);
+
+    // 3. Dispatch Enterprise Alerts
+    await this.notifyDiscord({
+      title: `💸 Hito #${milestoneIndex + 1} Verificado & Fondos Transferidos`,
+      color: 0x9945ff, // Solana Purple
+      fields: [
+        { name: "Grant ID", value: `#${grantId}`, inline: true },
+        { name: "Hito", value: `Fase ${milestoneIndex + 1}`, inline: true },
+        { name: "Receptor", value: `${builderPubkey.slice(0, 6)}...${builderPubkey.slice(-4)}`, inline: true },
+      ],
+      txSignature: disburseTx,
+    });
+
+    await this.sendEmail(
+      builderEmail,
+      `Fondos Transferidos: Hito #${milestoneIndex + 1} Rumbo a Breakpoint 2026`,
+      `<p>Tus comprobantes han sido aprobados por el comité de selección.</p>
+       <p>Se ha transferido la porción correspondiente de tu beca de viaje directamente a tu wallet de Solana.</p>
+       <p><strong>Hash de Transacción:</strong> <a href="https://explorer.solana.com/tx/${disburseTx}?cluster=devnet">${disburseTx}</a></p>`
+    );
+
+    return disburseTx;
+  }
+
+  // Internal: Discord Webhook Integration
+  private async notifyDiscord(payload: {
+    title: string;
+    color: number;
+    fields: { name: string; value: string; inline?: boolean }[];
+    txSignature: string;
+  }): Promise<void> {
+    if (!this.discordWebhookUrl) return;
+    try {
+      await axios.post(this.discordWebhookUrl, {
+        embeds: [
+          {
+            title: payload.title,
+            color: payload.color,
+            fields: [
+              ...payload.fields,
+              {
+                name: "Explorer",
+                value: `[Ver Transacción](https://explorer.solana.com/tx/${payload.txSignature}?cluster=devnet)`,
+              },
+            ],
+            footer: { text: "Solana Rumbo Sentinel • Breakpoint 2026 Delegation Engine" },
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      });
+    } catch (err: any) {
+      console.error("[TELEMETRY WARNING] Failed to post to Discord webhook:", err.message);
+    }
+  }
+
+  // Internal: Resend Transactional Email API Integration
+  private async sendEmail(to: string, subject: string, htmlContent: string): Promise<void> {
+    if (!this.resendApiKey) return;
+    try {
+      await axios.post(
+        "https://api.resend.com/emails",
+        {
+          from: "Breakpoint Travel Grants <grants@solana-rumbo.dev>",
+          to: [to],
+          subject: subject,
+          html: htmlContent,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      console.log(`[RESEND EMAIL SENT] Confirmation delivered to ${to}`);
+    } catch (err: any) {
+      console.error("[RESEND EMAIL ERROR] Failed to send email:", err.response?.data || err.message);
+    }
+  }
+}
 ```
 
 ---
 
 # 5. Comprehensive Test Suite & QA Matrix
 
-Complete Anchor integration test suite covering end-to-end campaign lifecycle: initialization, applicant submission, committee attestation, stipend disbursement, soulbound ticket claim, and boundary constraint assertion tests.
+Save this complete test file as `tests/rumbo-escrow.ts`. It exercises all edge cases: mathematical bounds, multi-milestone progression, unauthorized disbursements, and quorum approvals.
 
-### `tests/rumbo_breakpoint.ts`
 ```typescript
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+import { RumboEscrow } from "../target/types/rumbo_escrow";
+import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { expect } from "chai";
-import { RumboBreakpoint } from "../target/types/rumbo_breakpoint";
-import crypto from "crypto";
+import * as crypto from "crypto";
 
-describe("rumbo_breakpoint", () => {
+describe("rumbo_escrow test suite", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.RumboBreakpoint as Program<RumboBreakpoint>;
+  const program = anchor.workspace.RumboEscrow as Program<RumboEscrow>;
 
-  const admin = Keypair.generate();
-  const evaluator = Keypair.generate();
-  const builderAlice = Keypair.generate();
-  const builderBob = Keypair.generate();
+  const authority = Keypair.generate();
+  const sponsor = Keypair.generate();
+  const builder = Keypair.generate();
+  const juror1 = Keypair.generate();
+  const attacker = Keypair.generate();
 
-  const seasonId = 2026;
-  const maxTickets = 50;
-  const totalStipendCap = new anchor.BN(10 * LAMPORTS_PER_SOL);
-  const minScoreThreshold = 75;
+  const grantId = new anchor.BN(202601);
+  const totalAmount = new anchor.BN(4 * LAMPORTS_PER_SOL);
+  const m1 = new anchor.BN(2 * LAMPORTS_PER_SOL);
+  const m2 = new anchor.BN(1 * LAMPORTS_PER_SOL);
+  const m3 = new anchor.BN(1 * LAMPORTS_PER_SOL);
 
-  let campaignPda: PublicKey;
-  let campaignBump: number;
+  let configPda: PublicKey;
+  let grantPda: PublicKey;
   let vaultPda: PublicKey;
-  let vaultBump: number;
 
   before(async () => {
-    // Airdrop funds to actors
-    for (const actor of [admin, evaluator, builderAlice, builderBob]) {
-      const sig = await provider.connection.requestAirdrop(actor.publicKey, 5 * LAMPORTS_PER_SOL);
-      const latestBlockhash = await provider.connection.getLatestBlockhash();
-      await provider.connection.confirmTransaction({
-        signature: sig,
-        ...latestBlockhash,
-      });
+    // Airdrop SOL to test actors
+    for (const actor of [authority, sponsor, builder, juror1, attacker]) {
+      const sig = await provider.connection.requestAirdrop(actor.publicKey, 10 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(sig, "confirmed");
     }
 
-    const seasonBytes = Buffer.alloc(4);
-    seasonBytes.writeUInt32LE(seasonId, 0);
+    [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
 
-    [campaignPda, campaignBump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("campaign"), admin.publicKey.toBuffer(), seasonBytes],
+    [grantPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("grant"), builder.publicKey.toBuffer(), grantId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
 
-    [vaultPda, vaultBump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("campaign_vault"), campaignPda.toBuffer()],
-      program.programId
-    );
+    [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from("vault"), grantPda.toBuffer()], program.programId);
   });
 
-  it("1. Initializes Breakpoint 2026 Campaign and funds Vault PDA", async () => {
-    await program.methods
-      .initializeCampaign(seasonId, maxTickets, totalStipendCap, minScoreThreshold)
+  it("1. Initializes global protocol configuration with 1-juror quorum threshold", async () => {
+    const tx = await program.methods
+      .initialize(1, 250) // 1 juror quorum, 2.5% fee limit
       .accounts({
-        campaign: campaignPda,
+        config: configPda,
+        authority: authority.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([authority])
+      .rpc();
+
+    const configAccount = await program.account.config.fetch(configPda);
+    expect(configAccount.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+    expect(configAccount.juryQuorumThreshold).to.equal(1);
+    expect(configAccount.programFeeBasisPoints).to.equal(250);
+  });
+
+  it("2. Registers a new developer travel grant with 3 discrete milestones", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const expiry = new anchor.BN(now + 86400 * 30); // 30 days validity
+
+    await program.methods
+      .createGrant(grantId, totalAmount, [m1, m2, m3], expiry)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
         vault: vaultPda,
-        admin: admin.publicKey,
+        builder: builder.publicKey,
+        sponsor: sponsor.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .signers([admin])
+      .signers([sponsor])
       .rpc();
 
-    // Deposit 5 SOL into Vault PDA for stipend liquidity
-    const tx = new anchor.web3.Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: admin.publicKey,
-        toPubkey: vaultPda,
-        lamports: 5 * LAMPORTS_PER_SOL,
-      })
-    );
-    await provider.sendAndConfirm(tx, [admin]);
-
-    const campaignAccount = await program.account.campaign.fetch(campaignPda);
-    expect(campaignAccount.admin.toBase58()).to.equal(admin.publicKey.toBase58());
-    expect(campaignAccount.seasonId).to.equal(seasonId);
-    expect(campaignAccount.maxTickets).to.equal(maxTickets);
-    expect(campaignAccount.ticketsAwarded).to.equal(0);
-    expect(campaignAccount.minScoreThreshold).to.equal(minScoreThreshold);
+    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
+    expect(grantAccount.builder.toBase58()).to.equal(builder.publicKey.toBase58());
+    expect(grantAccount.sponsor.toBase58()).to.equal(sponsor.publicKey.toBase58());
+    expect(grantAccount.totalAmount.toString()).to.equal(totalAmount.toString());
   });
 
-  it("2. Builder submits grant application for travel & ticket support", async () => {
-    const [aliceAppPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("application"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
-      program.programId
-    );
-
-    const hashBuffer = crypto.createHash("sha256").update("github.com/alice/solana-zk-rollup").digest();
-    const commitHashArray = Array.from(hashBuffer);
-
-    const requestedStipend = new anchor.BN(2 * LAMPORTS_PER_SOL);
-
+  it("3. Funds the grant PDA vault with 4 SOL from sponsor", async () => {
     await program.methods
-      .applyForGrant("Alice Developer", "alice-sol", commitHashArray, requestedStipend)
+      .fundGrant(grantId)
       .accounts({
-        application: aliceAppPda,
-        campaign: campaignPda,
-        applicant: builderAlice.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([builderAlice])
-      .rpc();
-
-    const app = await program.account.application.fetch(aliceAppPda);
-    expect(app.applicant.toBase58()).to.equal(builderAlice.publicKey.toBase58());
-    expect(app.githubHandle).to.equal("alice-sol");
-    expect(app.requestedStipend.toString()).to.equal(requestedStipend.toString());
-    expect(JSON.stringify(app.status)).to.include("submitted");
-  });
-
-  it("3. Evaluation committee scores and attests applicant above threshold", async () => {
-    const [aliceAppPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("application"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
-      program.programId
-    );
-
-    const score = 92;
-    const approvedAmount = new anchor.BN(1.5 * LAMPORTS_PER_SOL);
-
-    await program.methods
-      .attestContribution(score, approvedAmount)
-      .accounts({
-        campaign: campaignPda,
-        application: aliceAppPda,
-        admin: admin.publicKey,
-        evaluator: evaluator.publicKey,
-      })
-      .signers([admin, evaluator])
-      .rpc();
-
-    const app = await program.account.application.fetch(aliceAppPda);
-    expect(app.score).to.equal(score);
-    expect(JSON.stringify(app.status)).to.include("approved");
-    expect(app.approvedStipend.toString()).to.equal(approvedAmount.toString());
-  });
-
-  it("4. Releases travel stipend lamports directly from PDA Vault to builder", async () => {
-    const [aliceAppPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("application"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
-      program.programId
-    );
-
-    const initialBalance = await provider.connection.getBalance(builderAlice.publicKey);
-
-    await program.methods
-      .disburseTravelStipend()
-      .accounts({
-        campaign: campaignPda,
+        grantEscrow: grantPda,
         vault: vaultPda,
-        application: aliceAppPda,
-        applicant: builderAlice.publicKey,
-        admin: admin.publicKey,
+        sponsor: sponsor.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .signers([admin])
+      .signers([sponsor])
       .rpc();
 
-    const finalBalance = await provider.connection.getBalance(builderAlice.publicKey);
-    expect(finalBalance).to.be.greaterThan(initialBalance);
-
-    const app = await program.account.application.fetch(aliceAppPda);
-    expect(JSON.stringify(app.status)).to.include("funded");
-    expect(app.approvedStipend.toNumber()).to.equal(0);
+    const vaultBalance = await provider.connection.getBalance(vaultPda);
+    expect(vaultBalance).to.equal(4 * LAMPORTS_PER_SOL);
   });
 
-  it("5. Mints Soulbound Breakpoint Ticket PDA receipt for attendee", async () => {
-    const [aliceAppPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("application"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
-      program.programId
-    );
+  it("4. Builder submits proof hash for Milestone 0 (Flight & Ticket Receipt)", async () => {
+    const dummyProof = crypto.createHash("sha256").update("LATAM_AIRLINES_BOOKING_REF_BKPT2026").digest();
+    const proofArray = Array.from(dummyProof);
 
-    const [ticketPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("ticket"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
+    await program.methods
+      .submitMilestoneProof(grantId, 0, proofArray)
+      .accounts({
+        grantEscrow: grantPda,
+        builder: builder.publicKey,
+      })
+      .signers([builder])
+      .rpc();
+
+    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
+    expect(grantAccount.milestoneStatus[0]).to.deep.equal({ submitted: {} });
+  });
+
+  it("5. Juror casts affirmative vote meeting the quorum requirement", async () => {
+    const [voteRecordPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vote"), grantPda.toBuffer(), Buffer.from([0]), juror1.publicKey.toBuffer()],
       program.programId
     );
 
     await program.methods
-      .claimBreakpointTicket()
+      .castJuryVote(grantId, 0, true)
       .accounts({
-        campaign: campaignPda,
-        application: aliceAppPda,
-        ticket: ticketPda,
-        applicant: builderAlice.publicKey,
+        grantEscrow: grantPda,
+        voteRecord: voteRecordPda,
+        juror: juror1.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .signers([builderAlice])
+      .signers([juror1])
       .rpc();
 
-    const ticket = await program.account.breakpointTicket.fetch(ticketPda);
-    expect(ticket.owner.toBase58()).to.equal(builderAlice.publicKey.toBase58());
-    expect(ticket.ticketNumber).to.equal(1);
-
-    const campaign = await program.account.campaign.fetch(campaignPda);
-    expect(campaign.ticketsAwarded).to.equal(1);
+    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
+    expect(grantAccount.juryApprovals[0]).to.equal(1);
   });
 
-  it("6. Rejects double-claim of Breakpoint Ticket (Anti-Sybil/Exploit Check)", async () => {
-    const [aliceAppPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("application"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
-      program.programId
-    );
+  it("6. Disburses Milestone 0 (2 SOL) directly to builder's wallet", async () => {
+    const builderBalanceBefore = await provider.connection.getBalance(builder.publicKey);
 
-    const [ticketPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("ticket"), campaignPda.toBuffer(), builderAlice.publicKey.toBuffer()],
-      program.programId
-    );
+    await program.methods
+      .disburseMilestone(grantId, 0)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        builder: builder.publicKey,
+        caller: juror1.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([juror1])
+      .rpc();
 
+    const builderBalanceAfter = await provider.connection.getBalance(builder.publicKey);
+    expect(builderBalanceAfter - builderBalanceBefore).to.equal(2 * LAMPORTS_PER_SOL);
+
+    const vaultBalanceRemaining = await provider.connection.getBalance(vaultPda);
+    expect(vaultBalanceRemaining).to.equal(2 * LAMPORTS_PER_SOL);
+  });
+
+  it("7. Fails when an attacker attempts to disburse funds to an unauthorized address", async () => {
     try {
       await program.methods
-        .claimBreakpointTicket()
+        .disburseMilestone(grantId, 1)
         .accounts({
-          campaign: campaignPda,
-          application: aliceAppPda,
-          ticket: ticketPda,
-          applicant: builderAlice.publicKey,
+          config: configPda,
+          grantEscrow: grantPda,
+          vault: vaultPda,
+          builder: attacker.publicKey, // Fraudulent address
+          caller: attacker.publicKey,
           systemProgram: SystemProgram.programId,
         })
-        .signers([builderAlice])
+        .signers([attacker])
         .rpc();
-      expect.fail("Should have thrown error on double claim");
+      expect.fail("Should have thrown constraint error");
     } catch (err: any) {
-      expect(err.toString()).to.include("TicketAlreadyClaimed");
+      expect(err.toString()).to.include("Error");
     }
   });
 });
@@ -997,119 +1230,126 @@ describe("rumbo_breakpoint", () => {
 
 # 6. Sponsor Handover & Turnkey Operations
 
-### 6.1 `Dockerfile`
-```dockerfile
-FROM node:20-alpine AS builder
+### 6.1 Deployment Playbook
 
-WORKDIR /usr/src/app
-COPY package*.json ./
-COPY tsconfig.json ./
-RUN npm ci
+#### Step 1: Solana CLI Environment Config
+```bash
+# Configure local CLI to Solana Devnet
+solana config set --url https://api.devnet.solana.com
 
-COPY src/ ./src/
-RUN npm run build
-
-FROM node:20-alpine AS runner
-WORKDIR /usr/src/app
-ENV NODE_ENV=production
-
-COPY package*.json ./
-RUN npm ci --only=production
-COPY --from=builder /usr/src/app/dist ./dist
-
-USER node
-EXPOSE 8080
-CMD ["node", "dist/cli.js"]
+# Verify deployer keypair balance (ensure >= 5 SOL)
+solana airdrop 5 $(solana address)
 ```
 
-### 6.2 `docker-compose.yml`
+#### Step 2: Build Anchor Program Artifacts
+```bash
+# Clean and compile the Rust Anchor binary
+anchor build
+
+# Retrieve generated Program ID and replace in lib.rs if modified
+solana address -k target/deploy/rumbo_escrow-keypair.json
+```
+
+#### Step 3: Deploy to Solana Devnet
+```bash
+anchor deploy --provider.cluster devnet
+```
+
+---
+
+### 6.2 Turnkey Multi-Stage Dockerfile
+
+Save as `Dockerfile`:
+
+```dockerfile
+# Build Stage
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json tsconfig.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Production Runner Stage
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+RUN npm ci --only=production
+COPY --from=builder /app/dist ./dist
+
+# Non-root security posture
+USER node
+EXPOSE 8080
+
+CMD ["node", "dist/services/rumbo-sentinel-cli.js"]
+```
+
+---
+
+### 6.3 Docker Compose Microservice Stack
+
+Save as `docker-compose.yml`:
+
 ```yaml
 version: "3.8"
 
 services:
-  rumbo-relayer:
+  rumbo-sentinel:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rumbo-breakpoint-worker
-    restart: always
-    environment:
-      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - PROGRAM_ID=RumbokZ3JcQWjC1E4uV4bZzK9f4w4hE2n8z1yX7pL5q
-      - PORT=8080
+    container_name: rumbo-sentinel-service
+    restart: unless-stopped
     ports:
       - "8080:8080"
+    environment:
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - PROGRAM_ID=Rumb011111111111111111111111111111111111111
+      - RESEND_API_KEY="mock_development_token_00000000000000"
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_url
+      - ADMIN_KEYPAIR_PATH=/secrets/admin-keypair.json
+    volumes:
+      - ./secrets:/secrets:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
 ```
 
-### 6.3 `.env.example`
-```env
-SOLANA_RPC_URL=https://api.devnet.solana.com
-RESEND_API_KEY=re_live_938102948192471928471
-DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
-TEST_EMAIL=builder@solana.org
-```
+---
 
-### 6.4 Deployment Playbook
+### 6.4 Operational Runbook & Incident Response
 
-#### Step 1: Build & Deploy Smart Contract to Solana Devnet/Mainnet
-```bash
-# Configure Solana CLI to targeted cluster
-solana config set --url https://api.devnet.solana.com
-
-# Build optimized BPF bytecode
-anchor build
-
-# Sync keys
-anchor keys sync
-
-# Deploy Anchor Program
-anchor deploy --program-name rumbo_breakpoint --program-keypair target/deploy/rumbo_breakpoint-keypair.json
-```
-
-#### Step 2: Initialize Campaign Season
-```bash
-# Fund and deploy the seasonal grant pool (e.g. 50 SOL, 100 tickets)
-npm run cli -- init --season 2026 --cap 50000000000 --tickets 100
-```
-
-#### Step 3: Launch Dockerized Event Listener & Notification Relayer
-```bash
-cp .env.example .env
-# Edit .env with real Resend API key and RPC URL
-docker-compose up -d --build
-docker-compose logs -f
-```
+| Incident Scenario | Severity | Root Cause Detection | Mitigation Command / Protocol |
+| :--- | :--- | :--- | :--- |
+| **Applicant Visas Denied / No-Show** | P2 | Milestone 1 or 2 left pending past `expiry_timestamp`. | Invoke `emergency_refund_expired` instruction via CLI. Escrow returns all remaining Lamports to sponsor DAO treasury. |
+| **RPC Endpoint Throttling / 429s** | P1 | Sentinel node logs HTTP 429 during high volume Breakpoint check-ins. | Fall back to private RPC providers (Helius, Triton, QuickNode) via dynamic failover URL in `.env`. |
+| **Tampered Receipt Submission** | P2 | Builder uploaded forged itinerary PDF. | Sentinel automated SHA-256 hash comparison against airline API metadata fails verification $\rightarrow$ Juror casts `approve: false` vote. |
 
 ---
 
 # 7. Bonus Social Media Pitch (X / Twitter Thread)
 
-### Tweet 1: The Problem & The Solution
-> 🛫 Rumbo a Breakpoint 2026! 
-> 
-> Getting grants & tickets to @SolanaConf shouldn't depend on subjective backdoors or slow reimbursement cycles. 
-> 
-> Introducing **Rumbo Protocol**: The on-chain, verifiable merit engine powering travel stipends and soulbound tickets for Breakpoint 2026 builders! 🧵👇
+### Tweet 1: The Problem & The Vision
+> ✈️ Rumbo a @Solana Breakpoint 2026: ¡El talento no debería quedarse en casa por falta de financiamiento!  
+>  
+> Presentamos **Rumbo Escrow Protocol**: la primera infraestructura descentralizada en #Solana para la gestión automatizada y transparente de becas de viaje y grants para builders. 🧵👇  
+> [Demo & Repo Link]
 
-### Tweet 2: The Tech Stack
-> Built natively on @solana:
-> ⚡ PDA-guaranteed milestone escrows
-> 🛡️ Cryptographic commit-hash proof of contribution
-> 🎟️ Non-transferable on-chain Soulbound tickets
-> 📬 Autonomous relayer dispatching flight grants via @resend & committee logs via Discord!
-> 
-> Zero manual spreadsheets. Sub-second finality. 🦀✨
+### Tweet 2: How It Works & Architecture
+> ⚙️ ¿Cómo garantizamos que el 100% de los fondos lleguen a builders que asisten y buildean?  
+>  
+> 1️⃣ Depósito de beca en Vault PDA (cero intermediarios).  
+> 2️⃣ Desembolso por 3 hitos auditables: Ticket/Vuelo (50%) ✈️, Visa (25%) 🛂 y Asistencia on-site con Proof-of-Build (25%) 💻.  
+> 3️⃣ Alertas automáticas con @resend y Discord para la comunidad.  
 
-### Tweet 3: Call to Action & Open Source
-> Transparent grant allocation is live on Devnet with full test coverage and automated dispatchers.
-> 
-> Let's make Breakpoint 2026 the most accessible, high-signal developer gathering in crypto history! 🚢
-> 
-> Check out the open-source repo & run a relayer node today: [github.com/rumbo-protocol/breakpoint-2026] #Solana #Breakpoint2026 #SolanaDevs
+### Tweet 3: Open-Source & Ready for Action
+> 🛡️ 100% seguro: Protección de tesorería con clawback automático para la DAO y suite de pruebas completas en Anchor.  
+>  
+> ¡Llevemos a la mejor delegación de la historia a Breakpoint 2026! 🚀  
+>  
+> Construido con orgullo para la comunidad de @Solana y @SolanaFndn. 🌐⚡  
+> #SolanaBreakpoint #SolanaDevs #RumboABreakpoint

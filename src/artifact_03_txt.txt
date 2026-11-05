@@ -1,19 +1,29 @@
-+----------------------------------------------------------------------------------------------------+
-|                                    ENTERPRISE INTEGRATION TOPOLOGY                                 |
-+----------------------------------------------------------------------------------------------------+
-|                                                                                                    |
-|  [Solana RPC Cluster (Helius/Triton)]                                                              |
-|        │                                                                                           |
-|        ├── WebSocket Subscription (Program Logs & Account Changes)                                 |
-|        ▼                                                                                           |
-|  [Rumbo Orchestration Daemon (Node.js/TypeScript Engine)]                                          |
-|        │                                                                                           |
-|        ├── Rate-Limited Queue Controller (P-Queue)                                                 |
-|        │                                                                                           |
-|        ├──► [Resend API Gateway (v3)] ────────► Enterprise HTML Email (Breakpoint Pass + PDF)      |
-|        │                                                                                           |
-|        ├──► [Discord/Slack Webhooks] ─────────► Multi-Sig Committee Real-Time Alert Channel        |
-|        │                                                                                           |
-|        └──► [Prometheus /metrics]    ─────────► Grafana Observability Dashboard                    |
-|                                                                                                    |
-+----------------------------------------------------------------------------------------------------+
++---------------------------------------------------------------------------------+
+|                                 SOLANA RUNTIME                                  |
+|                                                                                 |
+|  [Admin Authority]  --->  Initialize Campaign PDA  <---+ [Sponsor Funding]     |
+|                                     |                                           |
+|  [Builder Wallet]   --->  Submit Milestone Proof                               |
+|                                     |                                           |
+|  [Jury Multi-Sig]   --->  Cast Approval Vote (Quorum >= N)                      |
+|                                     |                                           |
+|                               Disburse Grant                                    |
+|                                     |                                           |
+|                         [GrantDisbursedEvent Emitted]                           |
++-------------------------------------|-------------------------------------------+
+                                      | (WSS rpc.mainnet-beta.solana.com)
+                                      v
++---------------------------------------------------------------------------------+
+|                       RUMBO PROTOCOL ENTERPRISE WORKER                          |
+|                                                                                 |
+|  - Solana WebSocket Subscription (`logsSubscribe`)                             |
+|  - Anchor Event Parser (`BorshCoder`)                                           |
+|  - Idempotent Dispatcher (In-memory + Redis cache fallback)                      |
+|                                                                                 |
+|          +--------------------------+--------------------------+                |
+|          |                                                     |                |
+|          v                                                     v                |
+|  [Resend REST API]                                   [Discord / Slack Webhooks] |
+|  - PDF Breakpoint 2026 Voucher                       - Grant Claim Broadcast    |
+|  - Travel Grant Receipt                              - Leaderboard Update       |
++---------------------------------------------------------------------------------+

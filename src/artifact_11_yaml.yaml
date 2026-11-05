@@ -1,22 +1,21 @@
 version: "3.8"
 
 services:
-  rumbo-relayer:
+  rumbo-orchestrator:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rumbo-breakpoint-worker
+    container_name: rumbo_breakpoint_orchestrator
     restart: always
     environment:
-      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+      - SOLANA_RPC_URL=https://api.devnet.solana.com
+      - SOLANA_WS_URL=wss://api.devnet.solana.com
+      - PROGRAM_ID=RumbocR3akpoint202611111111111111111111111
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - PROGRAM_ID=RumbokZ3JcQWjC1E4uV4bZzK9f4w4hE2n8z1yX7pL5q
-      - PORT=8080
-    ports:
-      - "8080:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SENDER_EMAIL=travel@breakpoint2026.solana.org
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

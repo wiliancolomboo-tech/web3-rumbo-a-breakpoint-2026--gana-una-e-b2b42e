@@ -1,6 +1,6 @@
-Código 100% abierto, con tests de integración completos y listo para producción con @AnchorLang. 
+Getting builders to @SolanaConf Breakpoint shouldn’t depend on opaque Google Sheets, manual wire transfers, or unverified grants.
 
-Los fondos de la comunidad están protegidos con clawbacks programables y los builders reciben sus viáticos sin demoras.
+Introducing "Rumbo a Breakpoint 2026" 🎟️✈️:
+The first on-chain, milestone-locked travel stipend & verified ticket escrow protocol built natively on Solana. 
 
-🚀 Repositorio listo para desplegar: https://github.com/solana-rumbo/breakpoint-2026
-¡Nos vemos en Breakpoint 2026! 🔥 @SuperteamLATAM #Solana #Breakpoint2026
+Here is how we empower the next generation of builders 👇

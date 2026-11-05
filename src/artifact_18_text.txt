@@ -1,7 +1,6 @@
-rumbopass_rpc_slot
-rumbopass_campaign_state
-rumbopass_entries_total
-rumbopass_claims_total
-rumbopass_notification_success_total
-rumbopass_notification_failure_total
-rumbopass_last_processed_signature_timestamp
+Zero capital risk for DAOs. Guaranteed travel liquidity for emerging LatAm & global devs. Built with 100% deterministic safety, sub-second settlement, and turnkey enterprise automations.
+
+Let's onboard the world to Breakpoint 2026! 🚀🇲🇽🇦🇷🇧🇷
+Codebase & Live Tests: https://github.com/solana-latam/rumbo-breakpoint-2026
+
+#Solana #RumboABreakpoint #OnlyPossibleOnSolana

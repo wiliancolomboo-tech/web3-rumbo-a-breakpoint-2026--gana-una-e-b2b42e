@@ -1,24 +1,35 @@
 flowchart TD
-    subgraph Builder_Experience [Builder Journey]
-        A[Applicant / Builder] -->|1. Submit Profile & Project Hash| B[Rumbo CLI / Web Portal]
-        B -->|2. apply_for_grant ix| C[Solana Program: rumbo_breakpoint]
+    subgraph OnChain["Solana Blockchain (Rumbo Breakpoint Core Engine)"]
+        Admin[Sponsor / Foundation Multi-Sig]
+        Builder[Applicant / Scholar Wallet]
+        VaultPDA[("USDC / SOL Vault PDA\n['vault', config]")]
+        ConfigPDA[("Program Config PDA\n['config']")]
+        GrantPDA[("Grant Application PDA\n['grant', applicant]")]
+        
+        Admin -->|initialize_program & fund_vault| VaultPDA
+        Admin -->|initialize_program| ConfigPDA
+        Builder -->|apply_for_grant| GrantPDA
+        Admin -->|review_application| GrantPDA
+        Admin -->|verify_milestone_and_disburse| GrantPDA
+        GrantPDA -.->|release escrowed funds| VaultPDA
+        VaultPDA -->|spl_token / lamport transfer| Builder
     end
 
-    subgraph OnChain_State [Solana Anchor Core Engine]
-        C -->|Initialize Application PDA| D[(Application State PDA)]
-        E[Grant Committee / Judges] -->|3. attest_contribution ix| C
-        C -->|Transition State to Approved| D
-        C -->|4. disburse_travel_stipend ix| F[(Treasury Vault PDA)]
-        F -->|Release SOL/USDC| A
-        C -->|5. claim_breakpoint_ticket ix| G[(Soulbound Ticket PDA)]
-        C -->|Emit Event: StipendDisbursed & TicketIssued| H[Solana Gossip / RPC Logs]
+    subgraph OffChain["Automation & Event-Driven Enterprise Layer"]
+        EventListener[Rumbo Automation Worker & Event Consumer]
+        RPC[Solana Dedicated RPC Node / WebSockets]
+        
+        RPC -->|Program Logs & State Transitions| EventListener
+        EventListener -->|Check Application Status| RPC
     end
 
-    subgraph OffChain_Automation [Enterprise Relayer Service]
-        H -->|WebSocket Log Subscription| I[Rumbo Automation Worker]
-        I -->|Parse Event Payload| J{Event Type}
-        J -->|TicketClaimed| K[Resend Transactional Email Engine]
-        J -->|GrantApproved| L[Discord Community Webhook]
-        K -->|Deliver Boarding Pass & QR Badge| A
-        L -->|Broadcast Merit Leaderboard| M[Solana Community Feed]
+    subgraph EnterpriseIntegrations["Enterprise Communication & Audit Systems"]
+        ResendAPI[Resend Email Gateway]
+        SlackWebhook[Discord / Slack Foundation Channel]
+        IPFS[Arweave / Irys Milestone Storage]
+        
+        EventListener -->|POST transactional travel grant confirmation & QR| ResendAPI
+        EventListener -->|POST operational audit trail & milestone alerts| SlackWebhook
+        Builder -->|Submit proposal & flight receipt hashes| IPFS
+        IPFS -.->|Content Identifier CID| GrantPDA
     end

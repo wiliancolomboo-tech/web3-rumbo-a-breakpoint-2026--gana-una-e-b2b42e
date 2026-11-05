@@ -1,7 +1,7 @@
 [package]
 name = "rumbo_breakpoint"
 version = "0.1.0"
-description = "Verifiable Travel Grant and Breakpoint Ticket Engine"
+description = "Rumbo a Breakpoint 2026 Travel Grant & Verification Engine"
 edition = "2021"
 
 [lib]
@@ -17,4 +17,4 @@ default = []
 
 [dependencies]
 anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
-anchor-spl = "0.30.1"
+anchor-spl = { version = "0.30.1", features = ["token"] }

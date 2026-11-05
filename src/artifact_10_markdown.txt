@@ -1,22 +1,21 @@
 🧵 1/3
-¡Nos vamos Rumbo a @Solana Breakpoint 2026! 🚀🇪🇸
+Presentamos RumboProtocol: La infraestructura on-chain para llevar a los mejores builders de LATAM a @Solana Breakpoint 2026. 🚀
 
-Presentamos RumboProtocol: el primer motor on-chain de becas de viaje y asignación verificable de entradas para #SolanaBreakpoint. 
+Se acabaron los formularios opacos y las semanas de espera para reembolsos de vuelos. Hoy el viaje a Breakpoint se programa y ejecuta en código. 👇 #Solana #Breakpoint2026
 
-Se acabaron las selecciones opacas y los fondos desperdiciados. Código abierto, trazabilidad 100% y pagos por hitos. 👇
+---
 
 🧵 2/3
-¿Cómo funciona RumboProtocol?
-⚙️ Escrow en Anchor: Los fondos ($USDC) se liberan por fases (vuelo, código en Devnet y llegada presencial).
-🎫 Tickets automatizados: Entrega instantánea de tickets VIP con @resendlabs al validar hitos.
-📢 Auditoría pública: Cada desembolso se notifica en tiempo real a Discord/Slack vía RPC events.
+¿Cómo funciona?
+1️⃣ Smart Contract Escrow en Solana: Los sponsors depositan viáticos en bóvedas PDA.
+2️⃣ Liberación algorítmica por hitos: 30% al reservar vuelos, 40% al hacer check-in presencial y 30% al desplegar en el hackathon.
+3️⃣ Integración enterprise inmediata: Disparo automático de tickets por @resend y alertas en Discord.
+
+---
 
 🧵 3/3
-Construido por y para la comunidad hispanohablante y global de @Solana.
+Transparencia total para la comunidad y cero riesgo de fondos perdidos con timelock clawbacks automáticos.
 
-Invitamos a los sponsors y jueces de Breakpoint a inspeccionar el repo, ejecutar la suite de pruebas unitarias y probar el agente en Devnet.
-
-¡Nos vemos en Breakpoint 2026 construyendo el futuro descentralizado! ☀️🌊
-
-Repo & Docs: https://github.com/solana-rumbo/breakpoint-2026-protocol
-#Solana #Breakpoint2026 #SolanaEcosystem #Rust #Anchor
+El camino a Breakpoint 2026 ya está desplegado en Devnet:
+🔗 GitHub / Código: https://github.com/solana-foundation/rumbo-a-breakpoint-2026
+⚡ ¡Nos vemos en Breakpoint! @Solana @SolanaConf

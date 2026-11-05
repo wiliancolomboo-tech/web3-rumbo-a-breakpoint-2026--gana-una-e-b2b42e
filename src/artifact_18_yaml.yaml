@@ -5,21 +5,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: rumbo_orchestrator_daemon
     restart: always
     environment:
       - NODE_ENV=production
-      - SOLANA_RPC_URL=https://api.devnet.solana.com
-      - PROGRAM_ID=RumboxQx6Zt3K6m1pB4uTfV2YvN8WpZ9cDeFgHjK1Mn
+      - PROGRAM_ID=RumbobReakpo1nt20261111111111111111111111
+      - SOLANA_RPC_HTTP_URL=https://api.devnet.solana.com
+      - SOLANA_RPC_WS_URL=wss://api.devnet.solana.com
       - RESEND_API_KEY=${RESEND_API_KEY}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - ANCHOR_WALLET=/app/keys/relayer-keypair.json
-    volumes:
-      - ./keys:/app/keys:ro
-    healthcheck:
-      test: ["CMD", "node", "-e", "console.log('Worker Active')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - ADMIN_NOTIFY_EMAIL=sponsors@solana.com
     logging:
       driver: "json-file"
       options:

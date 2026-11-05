@@ -1,20 +1,22 @@
 +-----------------------------------------------------------------------------------+
-|                              RUMBO PROTOCOL ENGINE                                |
+|                            FLIGHTDECK ARCHITECTURE TOPOLOGY                       |
 +-----------------------------------------------------------------------------------+
-        |                                                           |
-   (Anchor RPC)                                             (WebSocket Events)
-        v                                                           v
-+-----------------------+                               +-----------------------+
-|  Solana Mainnet-Beta  |                               |   Orchestrator Worker |
-|   - Program PDA       |                               |   - Event Monitor     |
-|   - Vault Token Acct  |                               |   - GitHub Verifier   |
-|   - Builder Registry  |                               |   - Multi-Sig Relay   |
-+-----------------------+                               +-----------------------+
-                                                                    |
-                                        +---------------------------+---------------------------+
-                                        |                                                       |
-                                        v                                                       v
-                             +--------------------+                                  +--------------------+
-                             | Resend API Service |                                  | Discord/Slack Hook |
-                             | (Email/Ticket PDF) |                                  | (Live Jury Audit)  |
-                             +--------------------+                                  +--------------------+
+|  [ Builder UI / CLI ]  <---->  [ Solana Mainnet / Devnet RPC (Helius / Triton) ]  |
+|                                                     ^                             |
+|                                                     |                             |
+|                                    [ Anchor Program: rumbo_breakpoint ]           |
+|                                    - GrantPool PDA (Sponsor funds vault)          |
+|                                    - BuilderGrant PDA (Milestone state)           |
+|                                                     |                             |
+|                                                     v (Transaction Logs)          |
+|                                     +-------------------------------+             |
+|                                     | FlightDeck Enterprise Worker  |             |
+|                                     +-------------------------------+             |
+|                                                     |                             |
+|                         +---------------------------+---------------------------+ |
+|                         |                                                       | |
+|                         v                                                       v |
+|             [ Resend API Engine ]                                    [ Slack Webhooks ]   |
+|         - Confirmation emails with                                  - Alerts to review    |
+|           itinerary hashes & QR tokens                                committee channel  |
++-----------------------------------------------------------------------------------+

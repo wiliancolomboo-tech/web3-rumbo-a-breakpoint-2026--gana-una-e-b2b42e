@@ -4,6 +4,6 @@ PROGRAM_ID=Rumb011111111111111111111111111111111111111
 ANCHOR_WALLET=./id.json
 
 # Enterprise Integrations
-RESEND_API_KEY=re_9a8b7c6d5e4f3a2b1c0d_sample
+RESEND_API_KEY="mock_development_token_00000000000000"
 DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 TEST_NOTIFICATION_EMAIL=fellowships@solanaspain.org

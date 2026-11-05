@@ -1,8 +1,8 @@
 {
   "status": "healthy",
-  "oracle_pubkey": "6uC4G8j1p...oraclePubkey",
-  "solana_cluster": "devnet",
-  "synced_slot": 312891823,
-  "active_campaign": "rumbo-breakpoint-2026",
-  "disbursed_total_sol": 18.0
+  "network": "solana-mainnet",
+  "programId": "BOP11111111111111111111111111111111111111111",
+  "rpcLatencyMs": 14,
+  "uptimeSeconds": 86400,
+  "queueBacklog": 0
 }

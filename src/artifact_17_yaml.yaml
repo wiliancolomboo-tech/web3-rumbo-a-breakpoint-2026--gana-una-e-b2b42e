@@ -1,23 +1,25 @@
-version: "3.9"
+version: "3.8"
 
 services:
-  flightpath-daemon:
+  solpath-listener:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: solana-flightpath-daemon
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     environment:
-      - PORT=8080
       - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-      - SOLANA_WS_URL=wss://api.mainnet-beta.solana.com
-      - PROGRAM_ID=FLiGHTPathBreakpoint2026Program1111111111111
+      - PROGRAM_ID=BrkPnt2026111111111111111111111111111111111
       - RESEND_API_KEY=${RESEND_API_KEY}
+      - SENDER_EMAIL=grants@solpath.io
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - RECIPIENT_OVERRIDE_EMAIL=${RECIPIENT_OVERRIDE_EMAIL:-}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'process.exit(0)'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     logging:
       driver: "json-file"
       options:
-        max-size: "20m"
-        max-file: "5"
+        max-size: "10m"
+        max-file: "3"

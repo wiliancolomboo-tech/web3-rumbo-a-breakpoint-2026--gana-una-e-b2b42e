@@ -1,7 +1,7 @@
 {
-  "status": "healthy",
-  "network": "devnet",
-  "programId": "RumbobP261111111111111111111111111111111111",
-  "activeSubscription": true,
+  "status": "UP",
+  "programId": "RumbobReakpo1nt2026Grants111111111111111111",
+  "slot": 312891921,
+  "resendConfigured": true,
   "uptimeSeconds": 86400
 }

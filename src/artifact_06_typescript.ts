@@ -1,222 +1,247 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { RumboBreakpoint } from "../target/types/rumbo_breakpoint";
+import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
-  TOKEN_PROGRAM_ID,
   createMint,
   createAccount,
   mintTo,
   getAccount,
+  TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { expect } from "chai";
+import crypto from "crypto";
 
-describe("rumbo_breakpoint unit and integration suite", () => {
+describe("rumbo_breakpoint e2e test suite", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.RumboBreakpoint as Program<RumboBreakpoint>;
+  const program = anchor.workspace.RumboBreakpoint as Program<any>;
 
-  let mintPubkey: anchor.web3.PublicKey;
-  let poolPda: anchor.web3.PublicKey;
-  let poolBump: number;
-  let vaultPda: anchor.web3.PublicKey;
-  let vaultBump: number;
+  const authority = (provider.wallet as anchor.Wallet).payer;
+  const builder = Keypair.generate();
+  const cohortId = "BP2026-LATAM-ROUND-1";
 
-  const authority = provider.wallet;
-  const candidateUser = anchor.web3.Keypair.generate();
-  let candidateRecordPda: anchor.web3.PublicKey;
-  let candidateRecordBump: number;
-  let candidateTokenAccount: anchor.web3.PublicKey;
+  let vaultMint: PublicKey;
+  let authorityTokenAccount: PublicKey;
+  let builderTokenAccount: PublicKey;
+  let cohortPda: PublicKey;
+  let cohortBump: number;
+  let vaultAccountPda: PublicKey;
+  let applicationPda: PublicKey;
 
-  const GRANT_AMOUNT = new anchor.BN(2000_000_000); // 2000 USDC (6 decimals)
-  const MAX_SCHOLARS = 10;
+  const maxStipend = new anchor.BN(1_500 * 1_000_000); // 1,500 USDC
+  const fundAmount = new anchor.BN(10_000 * 1_000_000); // 10,000 USDC
+  const requestedStipend = new anchor.BN(1_500 * 1_000_000);
+  const milestoneCount = 3;
 
   before(async () => {
-    // 1. Create Mock USDC Mint
-    mintPubkey = await createMint(
+    // 1. Airdrop SOL to builder
+    const sig = await provider.connection.requestAirdrop(
+      builder.publicKey,
+      2 * anchor.web3.LAMPORTS_PER_SOL
+    );
+    await provider.connection.confirmTransaction(sig);
+
+    // 2. Create USDC Mock Mint
+    vaultMint = await createMint(
       provider.connection,
-      (authority as any).payer,
+      authority,
       authority.publicKey,
       null,
       6
     );
 
-    // 2. Derive PDAs
-    [poolPda, poolBump] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("rumbo_pool"), authority.publicKey.toBuffer()],
+    // 3. Derive Cohort & Vault PDAs
+    [cohortPda, cohortBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("cohort"), Buffer.from(cohortId)],
       program.programId
     );
 
-    [vaultPda, vaultBump] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("scholarship_vault"), poolPda.toBuffer()],
+    [vaultAccountPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), cohortPda.toBuffer()],
       program.programId
     );
 
-    [candidateRecordPda, candidateRecordBump] =
-      anchor.web3.PublicKey.findProgramAddressSync(
-        [
-          Buffer.from("candidate_record"),
-          poolPda.toBuffer(),
-          candidateUser.publicKey.toBuffer(),
-        ],
-        program.programId
-      );
-
-    // 3. Create Candidate Token Account
-    candidateTokenAccount = await createAccount(
+    // 4. Create Token Accounts & Mint Supply
+    authorityTokenAccount = await createAccount(
       provider.connection,
-      (authority as any).payer,
-      mintPubkey,
-      candidateUser.publicKey
+      authority,
+      vaultMint,
+      authority.publicKey
+    );
+
+    builderTokenAccount = await createAccount(
+      provider.connection,
+      authority,
+      vaultMint,
+      builder.publicKey
+    );
+
+    await mintTo(
+      provider.connection,
+      authority,
+      vaultMint,
+      authorityTokenAccount,
+      authority,
+      20_000 * 1_000_000
+    );
+
+    [applicationPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("application"), cohortPda.toBuffer(), builder.publicKey.toBuffer()],
+      program.programId
     );
   });
 
-  it("1. Initializes the Breakpoint 2026 Scholarship Pool Escrow", async () => {
+  it("1. Initializes the Breakpoint 2026 Cohort", async () => {
+    const deadline = new anchor.BN(Math.floor(Date.now() / 1000) + 86400 * 30);
+    const ticketQuota = 10;
+
     await program.methods
-      .initializePool(poolBump, vaultBump, GRANT_AMOUNT, MAX_SCHOLARS)
+      .initializeCohort(cohortId, ticketQuota, maxStipend, deadline)
       .accounts({
-        pool: poolPda,
-        escrowVault: vaultPda,
-        tokenMint: mintPubkey,
         authority: authority.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
+        cohort: cohortPda,
+        vaultMint: vaultMint,
+        vaultAccount: vaultAccountPda,
+        systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
       .rpc();
 
-    const poolAccount = await program.account.scholarshipPool.fetch(poolPda);
-    expect(poolAccount.authority.toBase58()).to.equal(authority.publicKey.toBase58());
-    expect(poolAccount.grantPerScholar.toNumber()).to.equal(GRANT_AMOUNT.toNumber());
-    expect(poolAccount.maxScholars).to.equal(MAX_SCHOLARS);
-    expect(poolAccount.allocatedScholars).to.equal(0);
-    expect(poolAccount.isActive).to.be.true;
-
-    // Fund the escrow vault with initial liquidity (e.g., 20,000 USDC)
-    await mintTo(
-      provider.connection,
-      (authority as any).payer,
-      mintPubkey,
-      vaultPda,
-      authority.publicKey,
-      20_000_000_000
-    );
+    const cohortData = await program.account.cohort.fetch(cohortPda);
+    expect(cohortData.cohortId).to.equal(cohortId);
+    expect(cohortData.ticketQuota).to.equal(10);
+    expect(cohortData.authority.toBase58()).to.equal(authority.publicKey.toBase58());
   });
 
-  it("2. Registers an accepted candidate scholar with metadata", async () => {
-    const ghHandle = "solana-dev-latam";
-
+  it("2. Funds the Cohort PDA Escrow with 10,000 USDC", async () => {
     await program.methods
-      .registerCandidate(candidateUser.publicKey, ghHandle, candidateRecordBump)
+      .fundCohort(fundAmount)
       .accounts({
-        pool: poolPda,
-        candidateRecord: candidateRecordPda,
-        authority: authority.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .rpc();
-
-    const candidateAccount = await program.account.candidateRecord.fetch(
-      candidateRecordPda
-    );
-    expect(candidateAccount.candidate.toBase58()).to.equal(
-      candidateUser.publicKey.toBase58()
-    );
-    expect(candidateAccount.githubHandle).to.equal(ghHandle);
-    expect(candidateAccount.tranche1Claimed).to.be.false;
-    expect(candidateAccount.tranche2Claimed).to.be.false;
-
-    const poolAccount = await program.account.scholarshipPool.fetch(poolPda);
-    expect(poolAccount.allocatedScholars).to.equal(1);
-  });
-
-  it("3. Attests Milestone One and releases 60% travel stipend tranche", async () => {
-    await program.methods
-      .attestMilestoneOne()
-      .accounts({
-        pool: poolPda,
-        candidateRecord: candidateRecordPda,
-        escrowVault: vaultPda,
-        candidateTokenAccount: candidateTokenAccount,
-        authority: authority.publicKey,
+        funder: authority.publicKey,
+        cohort: cohortPda,
+        funderTokenAccount: authorityTokenAccount,
+        vaultAccount: vaultAccountPda,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();
 
-    const candidateAccount = await program.account.candidateRecord.fetch(
-      candidateRecordPda
-    );
-    expect(candidateAccount.tranche1Claimed).to.be.true;
-    expect(candidateAccount.isVerified).to.be.true;
-
-    const candidateBalance = await getAccount(
-      provider.connection,
-      candidateTokenAccount
-    );
-    // 60% of 2000 USDC = 1200 USDC (1,200,000,000 units)
-    expect(Number(candidateBalance.amount)).to.equal(1200_000_000);
+    const vaultBalance = await getAccount(provider.connection, vaultAccountPda);
+    expect(Number(vaultBalance.amount)).to.equal(fundAmount.toNumber());
   });
 
-  it("4. Prevents duplicate disbursement for Milestone One (Double-Spend Protection)", async () => {
+  it("3. Builder submits travel grant proposal with 3 milestones", async () => {
+    const proposalHash = Array.from(crypto.createHash("sha256").update("Solana Pay POS Mobile").digest());
+
+    await program.methods
+      .submitApplication(proposalHash, requestedStipend, milestoneCount)
+      .accounts({
+        builder: builder.publicKey,
+        cohort: cohortPda,
+        application: applicationPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([builder])
+      .rpc();
+
+    const appData = await program.account.application.fetch(applicationPda);
+    expect(appData.builder.toBase58()).to.equal(builder.publicKey.toBase58());
+    expect(appData.milestonesCount).to.equal(3);
+    expect(appData.status).to.deep.equal({ submitted: {} });
+  });
+
+  it("4. Foundation reviews and approves application & awards ticket voucher", async () => {
+    await program.methods
+      .reviewApplication(true)
+      .accounts({
+        authority: authority.publicKey,
+        cohort: cohortPda,
+        application: applicationPda,
+      })
+      .rpc();
+
+    const appData = await program.account.application.fetch(applicationPda);
+    expect(appData.status).to.deep.equal({ approved: {} });
+    expect(appData.ticketAwarded).to.be.true;
+
+    const cohortData = await program.account.cohort.fetch(cohortPda);
+    expect(cohortData.ticketsAwarded).to.equal(1);
+    expect(cohortData.totalFundsAllocated.toNumber()).to.equal(requestedStipend.toNumber());
+  });
+
+  it("5. Builder submits milestone #1 proof", async () => {
+    const proofHash = Array.from(crypto.createHash("sha256").update("github.com/pr/1").digest());
+
+    await program.methods
+      .submitMilestoneProof(proofHash)
+      .accounts({
+        builder: builder.publicKey,
+        application: applicationPda,
+      })
+      .signers([builder])
+      .rpc();
+
+    const appData = await program.account.application.fetch(applicationPda);
+    expect(appData.currentMilestone).to.equal(1);
+    expect(appData.milestonesCompleted).to.equal(0);
+  });
+
+  it("6. Reviewer verifies and releases 1st tranche (500 USDC)", async () => {
+    const initialBalance = await getAccount(provider.connection, builderTokenAccount);
+
+    await program.methods
+      .releaseMilestoneStipend()
+      .accounts({
+        reviewer: authority.publicKey,
+        cohort: cohortPda,
+        application: applicationPda,
+        grantee: builder.publicKey,
+        granteeTokenAccount: builderTokenAccount,
+        vaultAccount: vaultAccountPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+
+    const finalBalance = await getAccount(provider.connection, builderTokenAccount);
+    const diff = Number(finalBalance.amount) - Number(initialBalance.amount);
+    expect(diff).to.equal(500 * 1_000_000); // 1,500 / 3 = 500 USDC
+
+    const appData = await program.account.application.fetch(applicationPda);
+    expect(appData.milestonesCompleted).to.equal(1);
+  });
+
+  it("7. Fails when builder tries to claim next tranche before submitting proof", async () => {
     try {
       await program.methods
-        .attestMilestoneOne()
+        .releaseMilestoneStipend()
         .accounts({
-          pool: poolPda,
-          candidateRecord: candidateRecordPda,
-          escrowVault: vaultPda,
-          candidateTokenAccount: candidateTokenAccount,
-          authority: authority.publicKey,
+          reviewer: authority.publicKey,
+          cohort: cohortPda,
+          application: applicationPda,
+          grantee: builder.publicKey,
+          granteeTokenAccount: builderTokenAccount,
+          vaultAccount: vaultAccountPda,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
-      expect.fail("Should have failed with TrancheAlreadyClaimed");
+      expect.fail("Should have thrown NoMilestonePendingRelease");
     } catch (err: any) {
-      expect(err.error.errorCode.code).to.equal("TrancheAlreadyClaimed");
+      expect(err.error.errorCode.code).to.equal("NoMilestonePendingRelease");
     }
   });
 
-  it("5. Attests Milestone Two and releases remaining 40% upon in-person check-in", async () => {
-    await program.methods
-      .attestMilestoneTwo()
-      .accounts({
-        pool: poolPda,
-        candidateRecord: candidateRecordPda,
-        escrowVault: vaultPda,
-        candidateTokenAccount: candidateTokenAccount,
-        authority: authority.publicKey,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .rpc();
-
-    const candidateAccount = await program.account.candidateRecord.fetch(
-      candidateRecordPda
-    );
-    expect(candidateAccount.tranche2Claimed).to.be.true;
-
-    const candidateBalance = await getAccount(
-      provider.connection,
-      candidateTokenAccount
-    );
-    // Total 100% = 2000 USDC (2,000,000,000 units)
-    expect(Number(candidateBalance.amount)).to.equal(2000_000_000);
-  });
-
-  it("6. Rejects unauthorized access attempts to disburse funds", async () => {
-    const maliciousAttacker = anchor.web3.Keypair.generate();
-
+  it("8. Fails when unauthorized caller attempts to review application", async () => {
+    const impostor = Keypair.generate();
     try {
       await program.methods
-        .attestMilestoneTwo()
+        .reviewApplication(false)
         .accounts({
-          pool: poolPda,
-          candidateRecord: candidateRecordPda,
-          escrowVault: vaultPda,
-          candidateTokenAccount: candidateTokenAccount,
-          authority: maliciousAttacker.publicKey,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          authority: impostor.publicKey,
+          cohort: cohortPda,
+          application: applicationPda,
         })
-        .signers([maliciousAttacker])
+        .signers([impostor])
         .rpc();
       expect.fail("Should have failed with unauthorized error");
     } catch (err: any) {

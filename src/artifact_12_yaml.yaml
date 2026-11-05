@@ -1,21 +1,19 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  solpath-listener:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: solpath_worker
+  rumbo-event-worker:
+    build: .
     restart: always
     environment:
       - SOLANA_RPC_URL=https://api.devnet.solana.com
-      - PROGRAM_ID=SP26rumBoBreakPointTravel11111111111111111
+      - PROGRAM_ID=Rumb026BreakpointTravelEscrow111111111111111
       - RESEND_API_KEY=${RESEND_API_KEY}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - SENDER_EMAIL=grants@solpath.events
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "5"
+      - PORT=8080
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

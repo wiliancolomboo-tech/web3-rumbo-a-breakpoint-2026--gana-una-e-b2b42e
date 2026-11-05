@@ -1,5 +1,9 @@
-🔒 Non-custodial PDA vaults hold sponsor USDC.
-📊 Grants are disbursed in tranches:
- • 40% unlocked upon GitHub & testnet deployment proof.
- • 60% unlocked on flight & Breakpoint check-in.
-💌 Seamless real-time developer notifications powered by @resend & live Discord webhooks!
+client/
+├── package.json
+├── tsconfig.json
+└── src/
+    ├── index.ts
+    ├── services/
+    │   ├── notificationService.ts
+    │   └── solanaSubscriber.ts
+    └── types.ts

@@ -1,149 +1,251 @@
+// File: tests/rumbo-breakpoint.ts
 import * as anchor from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import { Resend } from "resend";
-import axios from "axios";
-import * as dotenv from "dotenv";
-import * as fs from "fs";
+import { Program } from "@coral-xyz/anchor";
+import { RumboBreakpoint } from "../target/types/rumbo_breakpoint";
+import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { assert, expect } from "chai";
 
-dotenv.config();
+describe("Rumbo a Breakpoint 2026 Protocol Tests", () => {
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
 
-const RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || "https://api.devnet.solana.com";
-const PROGRAM_ID = new PublicKey(process.env.PROGRAM_ID || "Rumbob3gKqC742q5JbA8tE685U2zH1n3M4FqL9W9Vbp");
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || "";
-const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || "";
+  const program = anchor.workspace.RumboBreakpoint as Program<RumboBreakpoint>;
 
-const resend = new Resend(RESEND_API_KEY);
+  const admin = (provider.wallet as any).payer as Keypair;
+  const checkinOracle = Keypair.generate();
+  const applicantOne = Keypair.generate();
+  const reviewerOne = Keypair.generate();
+  const reviewerTwo = Keypair.generate();
 
-interface EvaluationNotificationPayload {
-  candidate: string;
-  cohort: string;
-  stipendReleased: number;
-  txHash: string;
-}
+  const roundId = new anchor.BN(2026);
+  const grantAmount = new anchor.BN(4 * LAMPORTS_PER_SOL); // 4 SOL: 2 SOL Tranche 1 + 2 SOL Tranche 2
 
-export class NotificationDispatcher {
-  public static async dispatchSlack(payload: EvaluationNotificationPayload) {
-    if (!SLACK_WEBHOOK_URL) return;
-    const body = {
-      text: `🚀 *Rumbo a Breakpoint 2026: Grant Approved!*`,
-      attachments: [
-        {
-          color: "#14F195",
-          fields: [
-            { title: "Candidate Wallet", value: `\`${payload.candidate}\``, short: false },
-            { title: "Grant Released", value: `$${payload.stipendReleased.toLocaleString()} USDC`, short: true },
-            { title: "Cohort", value: payload.cohort, short: true },
-            { title: "Solana Explorer", value: `https://explorer.solana.com/tx/${payload.txHash}?cluster=devnet`, short: false }
-          ]
-        }
-      ]
-    };
-    await axios.post(SLACK_WEBHOOK_URL, body).catch(e => console.error("Slack webhook error:", e.message));
-  }
+  let globalConfigPda: PublicKey;
+  let roundPda: PublicKey;
+  let vaultPda: PublicKey;
+  let applicantPda: PublicKey;
 
-  public static async dispatchDiscord(payload: EvaluationNotificationPayload) {
-    if (!DISCORD_WEBHOOK_URL) return;
-    const embed = {
-      title: "🌴 Rumbo a Breakpoint 2026 - Milestone Approved & Travel Grant Released!",
-      color: 0x9945FF,
-      fields: [
-        { name: "Candidate", value: `\`${payload.candidate}\``, inline: false },
-        { name: "Amount Released", value: `$${payload.stipendReleased} USDC`, inline: true },
-        { name: "Status", value: "Verified by Multi-Sig Council", inline: true },
-        { name: "Transaction Hash", value: `[View on Solana Explorer](https://explorer.solana.com/tx/${payload.txHash}?cluster=devnet)`, inline: false }
-      ],
-      footer: { text: "Solana Breakpoint 2026 Automated Protocol" },
-      timestamp: new Date().toISOString()
-    };
-    await axios.post(DISCORD_WEBHOOK_URL, { embeds: [embed] }).catch(e => console.error("Discord webhook error:", e.message));
-  }
-
-  public static async sendTravelTicketEmail(candidateEmail: string, candidateWallet: string) {
-    if (!RESEND_API_KEY) return;
-    try {
-      await resend.emails.send({
-        from: "Breakpoint Pass <grants@breakpoint2026.solana.com>",
-        to: candidateEmail,
-        subject: "🎉 ¡Felicidades! Rumbo a Breakpoint 2026: Tu entrada y beca de viaje están listas",
-        html: `
-          <div style="font-family: Arial, sans-serif; background: #000; color: #fff; padding: 30px; border-radius: 8px;">
-            <h1 style="color: #14F195;">¡Tu viaje a Breakpoint 2026 está confirmado!</h1>
-            <p>Hola Builder,</p>
-            <p>Tus hitos técnicos han sido aprobados por el comité evaluador de la comunidad Solana.</p>
-            <div style="background: #111; padding: 20px; border: 1px solid #333; border-radius: 6px; margin: 20px 0;">
-              <p><strong>Billetera Beneficiaria:</strong> <code style="color: #9945FF;">${candidateWallet}</code></p>
-              <p><strong>Estado:</strong> Travel Grant ($2,500 USDC) acreditado on-chain.</p>
-              <p><strong>Entrada:</strong> Token-2022 Soulbound Pass acuñado.</p>
-            </div>
-            <p>Por favor consulta el portal de Solana FlightDeck para coordinar tus vuelos y credencial de acceso.</p>
-            <br/>
-            <p style="color: #888;">El equipo de Solana Breakpoint 2026</p>
-          </div>
-        `
-      });
-      console.log(`[Resend] Successfully dispatched travel kit email to ${candidateEmail}`);
-    } catch (err: any) {
-      console.error("[Resend] Failed to send email:", err.message);
+  before(async () => {
+    // AirDrop Lamports to test participants
+    const airdropSigners = [applicantOne, reviewerOne, reviewerTwo, checkinOracle];
+    for (const s of airdropSigners) {
+      const sig = await provider.connection.requestAirdrop(s.publicKey, 5 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(sig);
     }
-  }
-}
 
-async function main() {
-  console.log("⚡ Starting RumboProtocol Event Daemon...");
-  const connection = new Connection(RPC_ENDPOINT, "confirmed");
+    [globalConfigPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("global_config")],
+      program.programId
+    );
 
-  // Load Relayer Authority Keypair
-  const relayerKeyPath = process.env.RELAYER_KEYPAIR_PATH || "./relayer-keypair.json";
-  let relayerKeypair: Keypair;
-  if (fs.existsSync(relayerKeyPath)) {
-    const secretKey = Uint8Array.from(JSON.parse(fs.readFileSync(relayerKeyPath, "utf-8")));
-    relayerKeypair = Keypair.fromSecretKey(secretKey);
-  } else {
-    relayerKeypair = Keypair.generate();
-    console.warn(`[WARN] Using ephemeral relayer key: ${relayerKeypair.publicKey.toBase58()}`);
-  }
+    [roundPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("round"), roundId.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
 
-  const wallet = new anchor.Wallet(relayerKeypair);
-  const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
+    [vaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), roundPda.toBuffer()],
+      program.programId
+    );
 
-  // Minimal IDL for parsing log events
-  const idl = await anchor.Program.fetchIdl(PROGRAM_ID, provider);
-  if (!idl) {
-    throw new Error(`Could not fetch IDL for program ${PROGRAM_ID.toBase58()}`);
-  }
-  const program = new anchor.Program(idl, provider);
-
-  console.log(`[Connected] Listening on Program: ${PROGRAM_ID.toBase58()}`);
-
-  program.addEventListener("milestoneApprovedEvent", async (event: any, slot: number, signature: string) => {
-    console.log(`[EVENT] MilestoneApproved detected in tx: ${signature}`);
-    const stipendReleased = event.stipendReleased ? Number(event.stipendReleased) / 1_000_000 : 2500;
-    const payload: EvaluationNotificationPayload = {
-      candidate: event.candidate.toBase58(),
-      cohort: event.cohort.toBase58(),
-      stipendReleased,
-      txHash: signature,
-    };
-
-    await Promise.all([
-      NotificationDispatcher.dispatchSlack(payload),
-      NotificationDispatcher.dispatchDiscord(payload),
-      NotificationDispatcher.sendTravelTicketEmail("builder@solanadev.io", payload.candidate)
-    ]);
+    [applicantPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("applicant"), roundPda.toBuffer(), applicantOne.publicKey.toBuffer()],
+      program.programId
+    );
   });
 
-  program.addEventListener("milestoneSubmittedEvent", (event: any, slot: number, signature: string) => {
-    console.log(`[EVENT] New Milestone Submitted by ${event.candidate.toBase58()}: ${event.proofUrl} (TX: ${signature})`);
+  it("1. Initializes Global Program Config", async () => {
+    await program.methods
+      .initializeGlobal(checkinOracle.publicKey)
+      .accounts({
+        globalConfig: globalConfigPda,
+        admin: admin.publicKey,
+        checkinOracle: checkinOracle.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    const configAccount = await program.account.globalConfig.fetch(globalConfigPda);
+    assert.ok(configAccount.admin.equals(admin.publicKey));
+    assert.ok(configAccount.checkinOracle.equals(checkinOracle.publicKey));
+    assert.equal(configAccount.totalRounds.toNumber(), 0);
   });
 
-  // Keep alive
-  setInterval(() => {
-    console.log(`[Heartbeat] RumboProtocol Relayer active at slot check. Relayer pubkey: ${relayerKeypair.publicKey.toBase58()}`);
-  }, 60000);
-}
+  it("2. Initializes Scholarship Round with Escrow Vault", async () => {
+    const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour in future
+    const minReviews = 2;
+    const passScore = 75;
 
-main().catch((err) => {
-  console.error("Fatal daemon error:", err);
-  process.exit(1);
+    await program.methods
+      .initializeRound(
+        roundId,
+        grantAmount,
+        new anchor.BN(deadline),
+        minReviews,
+        passScore
+      )
+      .accounts({
+        globalConfig: globalConfigPda,
+        round: roundPda,
+        escrowVault: vaultPda,
+        admin: admin.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Fund the escrow vault with 10 SOL
+    const tx = new anchor.web3.Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: vaultPda,
+        lamports: 10 * LAMPORTS_PER_SOL,
+      })
+    );
+    await provider.sendAndConfirm(tx);
+
+    const round = await program.account.scholarshipRound.fetch(roundPda);
+    assert.equal(round.roundId.toNumber(), 2026);
+    assert.equal(round.passScoreThreshold, 75);
+    assert.equal(round.minReviewsRequired, 2);
+  });
+
+  it("3. Applicant submits application with IPFS hash", async () => {
+    const dummyCidBytes = new Array(32).fill(7); // Mock 32-byte CID
+
+    await program.methods
+      .apply(dummyCidBytes)
+      .accounts({
+        round: roundPda,
+        applicantRecord: applicantPda,
+        applicant: applicantOne.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([applicantOne])
+      .rpc();
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    assert.ok(record.applicant.equals(applicantOne.publicKey));
+    assert.equal(record.tranche1Lamports.toNumber(), 2 * LAMPORTS_PER_SOL);
+    assert.equal(record.tranche2Lamports.toNumber(), 2 * LAMPORTS_PER_SOL);
+  });
+
+  it("4. Reviewers score candidate", async () => {
+    const [reviewPda1] = PublicKey.findProgramAddressSync(
+      [Buffer.from("review"), applicantPda.toBuffer(), reviewerOne.publicKey.toBuffer()],
+      program.programId
+    );
+
+    const [reviewPda2] = PublicKey.findProgramAddressSync(
+      [Buffer.from("review"), applicantPda.toBuffer(), reviewerTwo.publicKey.toBuffer()],
+      program.programId
+    );
+
+    // Reviewer 1 scores 80
+    await program.methods
+      .submitReview(80)
+      .accounts({
+        round: roundPda,
+        applicantRecord: applicantPda,
+        reviewRecord: reviewPda1,
+        reviewer: reviewerOne.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([reviewerOne])
+      .rpc();
+
+    // Reviewer 2 scores 90
+    await program.methods
+      .submitReview(90)
+      .accounts({
+        round: roundPda,
+        applicantRecord: applicantPda,
+        reviewRecord: reviewPda2,
+        reviewer: reviewerTwo.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([reviewerTwo])
+      .rpc();
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    assert.equal(record.reviewCount, 2);
+    assert.equal(record.scoreSum, 170); // 80 + 90
+  });
+
+  it("5. Finalize applicant approval after quorum reached", async () => {
+    await program.methods
+      .finalize()
+      .accounts({
+        round: roundPda,
+        applicantRecord: applicantPda,
+        authority: admin.publicKey,
+      })
+      .rpc();
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    // Average = 85 >= 75 -> Approved
+    expect(record.status).to.deep.equal({ approved: {} });
+  });
+
+  it("6. Applicant claims Tranche 1 (50% travel prep funding)", async () => {
+    const balBefore = await provider.connection.getBalance(applicantOne.publicKey);
+
+    await program.methods
+      .claimTranche1()
+      .accounts({
+        round: roundPda,
+        applicantRecord: applicantPda,
+        escrowVault: vaultPda,
+        applicant: applicantOne.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([applicantOne])
+      .rpc();
+
+    const balAfter = await provider.connection.getBalance(applicantOne.publicKey);
+    assert.isAbove(balAfter, balBefore + 1.99 * LAMPORTS_PER_SOL);
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.status).to.deep.equal({ tranche1Disbursed: {} });
+  });
+
+  it("7. Fails when unauthorized key tries to sign Tranche 2 check-in", async () => {
+    const impostor = Keypair.generate();
+    try {
+      await program.methods
+        .claimTranche2()
+        .accounts({
+          globalConfig: globalConfigPda,
+          round: roundPda,
+          applicantRecord: applicantPda,
+          escrowVault: vaultPda,
+          checkinAuthority: impostor.publicKey,
+          applicant: applicantOne.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([impostor, applicantOne])
+        .rpc();
+      assert.fail("Should have failed with UnauthorizedSigner");
+    } catch (err: any) {
+      assert.include(err.toString(), "UnauthorizedSigner");
+    }
+  });
+
+  it("8. Successfully claims Tranche 2 with verified Breakpoint check-in signature", async () => {
+    await program.methods
+      .claimTranche2()
+      .accounts({
+        globalConfig: globalConfigPda,
+        round: roundPda,
+        applicantRecord: applicantPda,
+        escrowVault: vaultPda,
+        checkinAuthority: checkinOracle.publicKey,
+        applicant: applicantOne.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([checkinOracle, applicantOne])
+      .rpc();
+
+    const record = await program.account.applicantRecord.fetch(applicantPda);
+    expect(record.status).to.deep.equal({ fullyCompleted: {} });
+  });
 });

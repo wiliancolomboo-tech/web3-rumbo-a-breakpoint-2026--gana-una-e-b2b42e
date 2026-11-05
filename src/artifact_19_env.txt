@@ -4,6 +4,6 @@ PROGRAM_ID=Rumbob3gKqC742q5JbA8tE685U2zH1n3M4FqL9W9Vbp
 RELAYER_KEYPAIR_PATH=./relayer-keypair.json
 
 # Enterprise Notification Gateways
-RESEND_API_KEY=re_1234567890abcdef
+RESEND_API_KEY="mock_development_token_00000000000000"
 DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 SLACK_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder

@@ -3,6 +3,6 @@ SOLANA_RPC_URL=https://api.devnet.solana.com
 PROGRAM_ID=BrkPass1111111111111111111111111111111111111
 
 # Enterprise Dispatch Services
-RESEND_API_KEY=re_123456789_abcdefghijklmnopqrstuv
+RESEND_API_KEY="mock_development_token_00000000000000"
 SLACK_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
 DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder

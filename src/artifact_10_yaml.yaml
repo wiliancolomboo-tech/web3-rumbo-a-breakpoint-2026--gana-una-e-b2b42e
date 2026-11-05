@@ -1,22 +1,25 @@
 version: "3.8"
 
 services:
-  rumbo-orchestrator:
+  rumbo-sentinel:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rumbo_breakpoint_daemon
-    restart: always
+    container_name: rumbo-sentinel-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
       - SOLANA_RPC_URL=https://api.devnet.solana.com
-      - PROGRAM_ID=RumbogK9aM8aXG9HNx5mZ3KkH9u4kR3A1b8ZpS7v2vE
-      - COMMITTEE_KEYPAIR_PATH=/secrets/committee-keypair.json
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - PROGRAM_ID=Rumb011111111111111111111111111111111111111
+      - RESEND_API_KEY="mock_development_token_00000000000000"
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_url
+      - ADMIN_KEYPAIR_PATH=/secrets/admin-keypair.json
     volumes:
-      - ./secrets/committee-keypair.json:/secrets/committee-keypair.json:ro
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "5"
+      - ./secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

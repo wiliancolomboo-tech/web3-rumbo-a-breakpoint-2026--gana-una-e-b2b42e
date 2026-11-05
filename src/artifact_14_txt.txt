@@ -1,7 +1,12 @@
-Zero manual friction. 400ms payouts in SPL USDC. Full auditability for sponsors & foundations.
-
-The road to Breakpoint 2026 starts with reliable infrastructure. Ready for mainnet deployment!
-
-Code & architecture open-sourced: github.com/solana-bounties/breakpoint-voyage 
-
-#Solana #RumboABreakpoint #Breakpoint2026 #Superteam @Solana @SolanaFndn
++-------------------+-------------------------------------------------------------+
+| Operation         | Standard Operating Procedure (SOP)                          |
++-------------------+-------------------------------------------------------------+
+| Emergency Pause   | Call `set_paused(true)` via admin multisig in case of a     |
+|                   | compromised validator or suspicious surge in applications. |
++-------------------+-------------------------------------------------------------+
+| Vault Clawback    | If slot > `deadline_slot`, admin calls `emergency_clawback`|
+|                   | to refund remaining unclaimed lamports to sponsor treasury. |
++-------------------+-------------------------------------------------------------+
+| RPC Health Check  | Worker monitors WebSocket keepalive heartbeats every 15s.   |
+|                   | Auto-reconnects with exponential backoff if disconnected.   |
++-------------------+-------------------------------------------------------------+

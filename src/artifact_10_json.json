@@ -1,8 +1,8 @@
 {
-  "status": "healthy",
-  "protocol": "rumbo_breakpoint",
-  "oracle_pubkey": "7Xz...Qe2",
-  "cluster": "devnet",
-  "block_height": 298410291,
-  "resend_status": "connected"
-}
+    "status": "HEALTHY",
+    "network": "solana-mainnet",
+    "oraclePubkey": "ORAC1E...3b9",
+    "resendReady": true,
+    "activeCohort": 2026,
+    "uptimeSeconds": 142857
+  }

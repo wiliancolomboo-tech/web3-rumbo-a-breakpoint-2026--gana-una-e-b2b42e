@@ -1,0 +1,12 @@
+# Solana Network Configuration
+SOLANA_RPC_URL=https://api.devnet.solana.com
+PROGRAM_ID=RumbocKk6eMkWz3Qz2UvUv3mY8k6P9Fq8h1xN5c4Y6K
+COMMITTEE_KEYPAIR=[12,34,56,...]
+
+# Enterprise Messaging Webhooks
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T00/B00/XXXX
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/XXXX/YYYY
+
+# Email Gateway (Resend)
+RESEND_API_KEY="mock_development_token_00000000000000"
+DEFAULT_FROM_EMAIL=grants@rumbobreakpoint.dev

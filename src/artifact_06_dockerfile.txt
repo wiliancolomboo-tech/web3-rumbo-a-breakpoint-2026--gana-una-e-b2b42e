@@ -1,25 +1,25 @@
-FROM node:20-bullseye-slim
+FROM node:20-slim AS builder
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    python3 \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+COPY package*.json ./
+COPY tsconfig.json ./
+RUN npm ci
 
-COPY package*.json tsconfig.json ./
-RUN npm install
+COPY client/ ./client/
+RUN npm run build || npx tsc client/orchestrator.ts --outDir dist/
 
-COPY services/ ./services/
-COPY idl/ ./idl/
+FROM node:20-slim AS runner
 
-RUN npm run build
+WORKDIR /usr/src/app
+ENV NODE_ENV=production
 
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY --from=builder /usr/src/app/dist ./dist
+
+USER node
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
-
-CMD ["node", "dist/services/oracle-agent/src/rumbo-agent.js"]
+CMD ["node", "dist/orchestrator.js"]

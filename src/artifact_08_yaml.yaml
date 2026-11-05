@@ -1,21 +1,21 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  rumbo-orchestrator:
-    build: .
+  flightdeck-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flightdeck-breakpoint-daemon
     restart: always
     environment:
-      - SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-      - PROGRAM_ID=RumbobREAk202611111111111111111111111111111
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      - PROGRAM_ID=RumbokR6eRkJ3G3H25J9k9yP1P2gXh8qWbNnmE7tYv6
       - RESEND_API_KEY=${RESEND_API_KEY}
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
-      - KEYPAIR_PATH=/secrets/authority-keypair.json
-    volumes:
-      - ./secrets:/secrets:ro
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
     ports:
       - "8080:8080"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "5"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

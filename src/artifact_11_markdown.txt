@@ -1,19 +1,11 @@
-1/3 ✈️ ¿Listo para conquistar Breakpoint 2026? 
-
-Presentamos RumboPass: el protocolo descentralizado de becas y travel grants sobre @Solana para llevar a los mejores builders al evento del año. 
-
-Cero burocracia, 100% on-chain y custodia transparente. 👇🧵 #SolanaBreakpoint #Solana
+1/3 🚀 ¡El camino a @SolanaBreakpoint 2026 ya no depende de hojas de cálculo ni pagos demorados! Presentamos RumboVault: el protocolo descentralizado de asignación de becas de viaje y tickets para builders en @Solana. 🌐✨
 
 2/3 🛠️ ¿Cómo funciona?
-1️⃣ Registro meritocrático con GitHub Commit Proofs.
-2️⃣ Bóvedas PDA con tranches inteligentes:
-   🎟️ Tranche 1: Ticket oficial de Breakpoint
-   🛫 Tranche 2: Boleto aéreo y logística
-   📍 Tranche 3: Viáticos verificados vía check-in on-site.
+1️⃣ Builders registran sus proyectos on-chain.
+2️⃣ El jurado técnico evalúa y vota bajo consenso multi-sig criptográfico.
+3️⃣ Al cumplir el quórum, un Smart Contract libera al instante los fondos de viaje en $USDC y emite un Ticket Voucher vía @resend & webhooks. ¡Cero fricción!
 
-3/3 ⚡ Construido con @AnchorLang, alertas automáticas vía @resend y oráculos de verificación en tiempo real. 
+3/3 ⚡ Construido con @coral_xyz Anchor, seguridad estricta contra ataques de re-entrancia y entrega automatizada en <400ms. ¡Impulsando al mejor talento de LATAM y el mundo directo a Breakpoint 2026! 🌴🎒
 
-Gana tu entrada, vuela seguro y acelera el ecosistema.
-¡Nos vemos en Breakpoint 2026! 🚀🇦🇷🇲🇽🇨🇱
-
-Repo abierto y listo para producción: https://github.com/rumbopass/protocol
+GitHub & Demo: https://github.com/solana-bounties/rumbo-breakpoint-2026
+#Solana #Breakpoint2026 #SolanaDevs #RumboABreakpoint

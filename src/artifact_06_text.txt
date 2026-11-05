@@ -1,5 +1,7 @@
-services/relayer/
+client/
 ├── package.json
 ├── tsconfig.json
 └── src/
-    └── index.ts
+    ├── index.ts
+    ├── notify.ts
+    └── types.ts

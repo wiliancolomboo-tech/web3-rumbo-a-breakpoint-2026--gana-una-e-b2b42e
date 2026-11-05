@@ -1,10 +1,11 @@
-+---------------------------------------+
-                      |   Breakpoint 2026 Sponsor Escrow      |
-                      +---------------------------------------+
-                                          |
-                      +-------------------+-------------------+
-                      |                                       |
-              [Phase 1: Proof]                        [Phase 2: Check-in]
-           Visa & Travel Confirmation               On-Site Solana Pay QR Check-in
-                      |                                       |
-        50% Travel Escrow Release                50% Stipend + Ticket NFT Minted
+[ Sponsor Treasury / DAO ]
+                                            |
+                                  (USDC/SOL Deposit)
+                                            v
+[ Applicant ] ---> Submit Milestones ---> [ PDA Escrow Vault ] ---> Milestone Verified ---> [ Instant Payout ]
+                         |                         ^
+                 (Flight / Ticket / Visa)          |
+                         |                         |
+                         v                         |
+                [ Rumbo Sentinel Node ] -----------+
+                (IPFS Hashing + Jury Sig)

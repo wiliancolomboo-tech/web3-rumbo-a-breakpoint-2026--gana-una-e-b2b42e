@@ -1,11 +1,2 @@
-1/3 🚀 ¡El camino a @Solana Breakpoint 2026 empieza aquí! Presentamos #RumboProtocol: el protocolo de gestión descentralizada de travel grants y tickets para llevar a los mejores builders de Latam directo a la mayor conferencia de Solana. 🌎⚡
-
-2/3 🔐 Adiós a reembolsos manuales o burocracia:
-✅ Bóvedas de garantía en USDC en @Solana
-✅ Desembolsos milestone-gated (Vuelo PNR + On-site Check-in)
-✅ Sentinel Agent con @ResendLabs + Discord/Slack notifications
-✅ 100% auditable y non-custodial.
-
-3/3 Construido para empoderar a la comunidad y garantizar que ningún talento se quede sin volar a Breakpoint. Código abierto, testeado e implementado de extremo a extremo. ¡Nos vemos en Breakpoint 2026! 🚢✨
-Repo: github.com/solana-latam/rumbo-a-breakpoint-protocol
-cc @SolanaAllstars @SuperteamLatam
+tests/
+└── rumbo-protocol.ts

@@ -1,0 +1,5 @@
+How it works under the hood on @Solana:
+1️⃣ Sponsors fund an Anchor PDA escrow vault with USDC.
+2️⃣ Builders submit cryptographic proof of travel (Milestone 1) ➡️ unlocks 40% travel advance + conference ticket pass.
+3️⃣ Build & ship at Breakpoint (Milestone 2) ➡️ unlocks remaining 60%.
+4️⃣ Automated notifications & tickets dispatched via @resend & Discord.

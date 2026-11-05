@@ -1,68 +1,57 @@
 use anchor_lang::prelude::*;
-use crate::state::{Campaign, Grantee, GranteeStatus};
+use crate::state::{ScholarshipRound, ApplicantRecord, ReviewRecord, ScholarStatus};
 use crate::errors::RumboError;
 
 #[derive(Accounts)]
-pub struct ApproveMilestone<'info> {
+pub struct SubmitReview<'info> {
+    #[account(
+        seeds = [b"round", round.round_id.to_le_bytes().as_ref()],
+        bump = round.bump
+    )]
+    pub round: Account<'info, ScholarshipRound>,
+
     #[account(
         mut,
-        constraint = reviewer.key() == campaign.authority @ RumboError::UnauthorizedReviewer
+        seeds = [b"applicant", round.key().as_ref(), applicant_record.applicant.as_ref()],
+        bump = applicant_record.bump
     )]
+    pub applicant_record: Account<'info, ApplicantRecord>,
+
+    #[account(
+        init,
+        payer = reviewer,
+        space = ReviewRecord::LEN,
+        seeds = [b"review", applicant_record.key().as_ref(), reviewer.key().as_ref()],
+        bump
+    )]
+    pub review_record: Account<'info, ReviewRecord>,
+
+    #[account(mut)]
     pub reviewer: Signer<'info>,
-
-    #[account(
-        mut,
-        seeds = [b"campaign", campaign.authority.as_ref(), campaign.title.as_bytes()],
-        bump = campaign.bump
-    )]
-    pub campaign: Account<'info, Campaign>,
-
-    #[account(
-        mut,
-        seeds = [b"grantee", campaign.key().as_ref(), grantee.scholar.as_ref()],
-        bump = grantee.bump,
-        constraint = grantee.campaign == campaign.key()
-    )]
-    pub grantee: Account<'info, Grantee>,
+    pub system_program: Program<'info, System>,
 }
 
-#[event]
-pub struct MilestoneApprovedEvent {
-    pub campaign: Pubkey,
-    pub scholar: Pubkey,
-    pub milestones_approved: u8,
-    pub total_milestones: u8,
-    pub is_fully_verified: bool,
-}
+pub fn handle_submit_review(
+    ctx: Context<SubmitReview>,
+    score: u8,
+) -> Result<()> {
+    require!(score >= 1 && score <= 100, RumboError::InvalidScoreRange);
 
-pub fn handler(ctx: Context<ApproveMilestone>) -> Result<()> {
-    let grantee = &mut ctx.accounts.grantee;
-    let campaign = &mut ctx.accounts.campaign;
-
-    grantee.milestones_approved = grantee.milestones_approved.checked_add(1).ok_or(RumboError::MathOverflow)?;
-
-    let mut fully_verified = false;
-    if grantee.milestones_approved >= grantee.milestone_count {
-        grantee.status = GranteeStatus::Verified;
-        grantee.ticket_issued = true; // Auto-qualifies for Breakpoint 2026 Ticket
-        campaign.approved_grantees = campaign.approved_grantees.checked_add(1).ok_or(RumboError::MathOverflow)?;
-        fully_verified = true;
-    }
-
-    emit!(MilestoneApprovedEvent {
-        campaign: campaign.key(),
-        scholar: grantee.scholar,
-        milestones_approved: grantee.milestones_approved,
-        total_milestones: grantee.milestone_count,
-        is_fully_verified: fully_verified,
-    });
-
-    msg!(
-        "Milestone approved for scholar {}. Progress: {}/{}",
-        grantee.scholar,
-        grantee.milestones_approved,
-        grantee.milestone_count
+    let applicant_record = &mut ctx.accounts.applicant_record;
+    require!(
+        applicant_record.status == ScholarStatus::Applied || applicant_record.status == ScholarStatus::UnderReview,
+        RumboError::InvalidApplicantStatus
     );
+
+    applicant_record.score_sum = applicant_record.score_sum.checked_add(score as u32).ok_or(RumboError::MathOverflow)?;
+    applicant_record.review_count = applicant_record.review_count.checked_add(1).ok_or(RumboError::MathOverflow)?;
+    applicant_record.status = ScholarStatus::UnderReview;
+
+    let review_record = &mut ctx.accounts.review_record;
+    review_record.applicant = applicant_record.applicant;
+    review_record.reviewer = ctx.accounts.reviewer.key();
+    review_record.score = score;
+    review_record.bump = ctx.bumps.review_record;
 
     Ok(())
 }

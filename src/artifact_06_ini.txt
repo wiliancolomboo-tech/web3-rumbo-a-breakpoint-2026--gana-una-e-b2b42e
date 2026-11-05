@@ -1,7 +1,8 @@
-SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=Rumbobreakpoint11111111111111111111111111111
-AUTHORITY_KEYPAIR_PATH=~/.config/solana/id.json
-RESEND_API_KEY=re_live_38294723948729384729384
-SENDER_EMAIL=tickets@solanabreakpoint.org
-DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
+RPC_HTTP_URL=https://api.devnet.solana.com
+RPC_WS_URL=wss://api.devnet.solana.com
+PROGRAM_ID=RumbobReakpo1nt202611111111111111111111111
+RESEND_API_KEY="mock_development_token_00000000000000"
+FROM_EMAIL=rumbo@superteam.fun
+ADMIN_ALERT_EMAIL=latam-lead@solana.org
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1234567890/tokenXYZ
 PORT=8080

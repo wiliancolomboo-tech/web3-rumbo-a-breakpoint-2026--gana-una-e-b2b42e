@@ -1,41 +1,58 @@
-use anchor_lang::prelude::*;
-
 pub mod errors;
 pub mod instructions;
 pub mod state;
 
-use instructions::*;
+use anchor_lang::prelude::*;
+use instructions::apply::*;
+use instructions::claim_tranche::*;
+use instructions::finalize::*;
+use instructions::initialize::*;
 
-declare_id!("RumboxQx6Zt3K6m1pB4uTfV2YvN8WpZ9cDeFgHjK1Mn");
+declare_id!("RumbobReakpo1nt202611111111111111111111111");
 
 #[program]
-pub mod rumbo_protocol {
+pub mod rumbo_breakpoint {
     use super::*;
 
-    pub fn initialize_campaign(
-        ctx: Context<InitializeCampaign>,
-        title: String,
-        total_allocation: u64,
-        stipend_per_scholar: u64,
-        duration_seconds: i64,
+    pub fn initialize_global(ctx: Context<InitializeGlobal>, checkin_oracle: Pubkey) -> Result<()> {
+        handle_initialize_global(ctx, checkin_oracle)
+    }
+
+    pub fn initialize_round(
+        ctx: Context<InitializeRound>,
+        round_id: u64,
+        grant_amount_per_scholar: u64,
+        application_deadline: i64,
+        min_reviews_required: u8,
+        pass_score_threshold: u8,
     ) -> Result<()> {
-        instructions::initialize_campaign::handler(ctx, title, total_allocation, stipend_per_scholar, duration_seconds)
+        handle_initialize_round(
+            ctx,
+            round_id,
+            grant_amount_per_scholar,
+            application_deadline,
+            min_reviews_required,
+            pass_score_threshold,
+        )
     }
 
-    pub fn apply_grant(
-        ctx: Context<ApplyGrant>,
-        handle: String,
-        repo_commit_hash: String,
-        expected_milestones: u8,
-    ) -> Result<()> {
-        instructions::apply_grant::handler(ctx, handle, repo_commit_hash, expected_milestones)
+    pub fn apply(ctx: Context<ApplyScholarship>, ipfs_metadata_hash: [u8; 32]) -> Result<()> {
+        handle_apply(ctx, ipfs_metadata_hash)
     }
 
-    pub fn approve_milestone(ctx: Context<ApproveMilestone>) -> Result<()> {
-        instructions::approve_milestone::handler(ctx)
+    pub fn submit_review(ctx: Context<SubmitReview>, score: u8) -> Result<()> {
+        handle_submit_review(ctx, score)
     }
 
-    pub fn claim_travel_stipend(ctx: Context<ClaimTravelStipend>) -> Result<()> {
-        instructions::claim_travel_stipend::handler(ctx)
+    pub fn finalize(ctx: Context<FinalizeApplicant>) -> Result<()> {
+        handle_finalize(ctx)
+    }
+
+    pub fn claim_tranche_1(ctx: Context<ClaimTranche1>) -> Result<()> {
+        handle_claim_tranche_1(ctx)
+    }
+
+    pub fn claim_tranche_2(ctx: Context<ClaimTranche2>) -> Result<()> {
+        handle_claim_tranche_2(ctx)
     }
 }

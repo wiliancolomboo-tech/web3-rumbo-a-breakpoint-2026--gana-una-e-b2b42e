@@ -1,7 +1,7 @@
-⚡ Sub-cent execution. 
-🛡️ Zero-loss clawback guarantees for sponsors if visas fail.
-📦 100% open-source Anchor program, full TypeScript SDK, and Dockerized evaluator runner.
+3/3 🛡️ Turnkey & Enterprise Ready:
+Integrado con @resend para confirmaciones de tickets en tiempo real, webhooks a Discord/Slack y protección de reembolsos para sponsors.
 
-Latin America is shipping to the world. Let’s get our builders to Breakpoint 2026! 🌐🦀 
+Nos vemos en Breakpoint 2026! 🛫🦀
+GitHub: https://github.com/solana-rumbo/rumbo-breakpoint-2026
 
-Github repo: https://github.com/solana-latam/rumbo-breakpoint-protocol
+cc @SolanaConf @SolanaUniv @Solana_LATAM

@@ -1,5 +1,9 @@
+# Solana Configuration
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=RumbogK9aM8aXG9HNx5mZ3KkH9u4kR3A1b8ZpS7v2vE
-COMMITTEE_KEYPAIR_PATH=./secrets/committee-keypair.json
-RESEND_API_KEY=re_123456789abcdef
-DISCORD_WEBHOOK_URL=https://api.example.com/webhooks/alerts/placeholder
+PROGRAM_ID=RumbokZ9u4t9mX44Y8g7C198PqVwK3UReQeW2h1bTjQ
+COMMITTEE_KEYPAIR_PATH=./keys/committee-keypair.json
+
+# Enterprise Notification Credentials
+RESEND_API_KEY="mock_development_token_00000000000000"
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/123456789/your-webhook-token
+RECIPIENT_NOTIFICATION_EMAIL=applicant@domain.lat

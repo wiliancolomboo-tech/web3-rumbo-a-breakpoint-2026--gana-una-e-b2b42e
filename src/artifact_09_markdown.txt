@@ -1,18 +1,23 @@
-1/3 🚨 Breaking barriers for global builders: Announcing "Rumbo a Breakpoint 2026"! ✈️☀️
+🧵 1/3
+¡Rumbo a Breakpoint 2026! 🚀
 
-Attending @Solana Breakpoint shouldn't be held back by slow wires, opaque grants, or cross-border payment hurdles. 
+Hemos construido la solución definitiva para democratizar el acceso a grants de viaje y entradas oficiales para @Solana Breakpoint: "RutaBreakpoint Protocol".
 
-We built an open-source, milestone-driven Travel Escrow & Ticket Protocol on #Solana! 🧵👇
+Construido 100% on-chain en Solana con contratos seguros en Anchor. 👇
 
-2/3 🛠️ How RumboBreak works:
-✅ Non-custodial PDA Escrows protect sponsor & student funds
-✅ Deterministic committee multi-evaluations with tamper-proof records
-✅ Sub-second travel stipend releases directly to Solana wallets
-✅ Instant notification triggers via @resend & Discord
+🧵 2/3
+¿Por qué es diferente?
+Tradicionalmente, las becas de viaje son lentas, subjetivas y vulnerables a farming.
+✨ Con RutaBreakpoint:
+- Proof-of-Work developer criptográfico
+- Evaluación consensuada multi-juez sin sesgo centralizado
+- Escrow con streaming en dos tranches
+- Alertas en tiempo real vía @resend & Discord
 
-3/3 🌐 No spreadsheets. Zero fund leakage. 100% on-chain auditability on @solana. 
+🧵 3/3
+El código está completamente abierto, auditado con suites de pruebas completas y listo para correr en 1 click con Docker.
 
-Empowering the next generation of builders to ship from their home countries all the way to the main stage at Breakpoint 2026! 🚢🌴
+Construyamos el ecosistema más meritocrático del mundo cripto. ¡Nos vemos en Breakpoint 2026! ☀️⚡️
 
-Check out the verified code & architecture on GitHub 🔗👇
-#Solana #SolanaBreakpoint #Web3Builders
+Repo & Demo: github.com/solana-community/ruta-breakpoint-2026
+#Solana #Breakpoint2026 #Web3Grants

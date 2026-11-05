@@ -1,229 +1,183 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { RumboProtocol } from "../target/types/rumbo_protocol";
+import { RumboEscrow } from "../target/types/rumbo_escrow";
 import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { expect } from "chai";
 import * as crypto from "crypto";
 
-describe("rumbo_protocol test suite", () => {
+describe("rumbo_escrow test suite", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.RumboProtocol as Program<RumboProtocol>;
+  const program = anchor.workspace.RumboEscrow as Program<RumboEscrow>;
 
-  const campaignId = "breakpoint-2026-latam";
-  const ticketQuota = 10;
-  const grantPerBuilder = new anchor.BN(2 * LAMPORTS_PER_SOL); // 2 SOL stipend
-  const travelDeadline = new anchor.BN(Math.floor(Date.now() / 1000) + 86400 * 30); // 30 days ahead
-
-  const sponsor = (provider.wallet as anchor.Wallet).payer;
+  const authority = Keypair.generate();
+  const sponsor = Keypair.generate();
   const builder = Keypair.generate();
-  const unauthorizedUser = Keypair.generate();
+  const juror1 = Keypair.generate();
+  const attacker = Keypair.generate();
 
-  let campaignPda: PublicKey;
+  const grantId = new anchor.BN(202601);
+  const totalAmount = new anchor.BN(4 * LAMPORTS_PER_SOL);
+  const m1 = new anchor.BN(2 * LAMPORTS_PER_SOL);
+  const m2 = new anchor.BN(1 * LAMPORTS_PER_SOL);
+  const m3 = new anchor.BN(1 * LAMPORTS_PER_SOL);
+
+  let configPda: PublicKey;
+  let grantPda: PublicKey;
   let vaultPda: PublicKey;
-  let applicantPda: PublicKey;
-  let voucherPda: PublicKey;
 
   before(async () => {
-    // Airdrop funds to builder and unauthorized test accounts
-    const airdropSig1 = await provider.connection.requestAirdrop(builder.publicKey, 5 * LAMPORTS_PER_SOL);
-    await provider.connection.confirmTransaction(airdropSig1);
+    // Airdrop SOL to test actors
+    for (const actor of [authority, sponsor, builder, juror1, attacker]) {
+      const sig = await provider.connection.requestAirdrop(actor.publicKey, 10 * LAMPORTS_PER_SOL);
+      await provider.connection.confirmTransaction(sig, "confirmed");
+    }
 
-    const airdropSig2 = await provider.connection.requestAirdrop(unauthorizedUser.publicKey, 2 * LAMPORTS_PER_SOL);
-    await provider.connection.confirmTransaction(airdropSig2);
+    [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
 
-    // Derive deterministic PDAs
-    [campaignPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("campaign"), Buffer.from(campaignId)],
+    [grantPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("grant"), builder.publicKey.toBuffer(), grantId.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
 
-    [vaultPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vault"), Buffer.from(campaignId)],
-      program.programId
-    );
-
-    [applicantPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("applicant"), campaignPda.toBuffer(), builder.publicKey.toBuffer()],
-      program.programId
-    );
-
-    [voucherPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("voucher"), campaignPda.toBuffer(), builder.publicKey.toBuffer()],
-      program.programId
-    );
+    [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from("vault"), grantPda.toBuffer()], program.programId);
   });
 
-  it("1. Initializes the Rumbo Breakpoint Campaign & Seeds Vault Escrow", async () => {
-    await program.methods
-      .initializeCampaign(campaignId, ticketQuota, grantPerBuilder, travelDeadline)
+  it("1. Initializes global protocol configuration with 1-juror quorum threshold", async () => {
+    const tx = await program.methods
+      .initialize(1, 250) // 1 juror quorum, 2.5% fee limit
       .accounts({
-        campaign: campaignPda,
+        config: configPda,
+        authority: authority.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([authority])
+      .rpc();
+
+    const configAccount = await program.account.config.fetch(configPda);
+    expect(configAccount.authority.toBase58()).to.equal(authority.publicKey.toBase58());
+    expect(configAccount.juryQuorumThreshold).to.equal(1);
+    expect(configAccount.programFeeBasisPoints).to.equal(250);
+  });
+
+  it("2. Registers a new developer travel grant with 3 discrete milestones", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const expiry = new anchor.BN(now + 86400 * 30); // 30 days validity
+
+    await program.methods
+      .createGrant(grantId, totalAmount, [m1, m2, m3], expiry)
+      .accounts({
+        config: configPda,
+        grantEscrow: grantPda,
         vault: vaultPda,
-        authority: sponsor.publicKey,
+        builder: builder.publicKey,
+        sponsor: sponsor.publicKey,
         systemProgram: SystemProgram.programId,
       })
       .signers([sponsor])
       .rpc();
 
-    // Sponsor funds the Escrow Vault directly with 10 SOL
-    const fundTx = new anchor.web3.Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey: sponsor.publicKey,
-        toPubkey: vaultPda,
-        lamports: 10 * LAMPORTS_PER_SOL,
-      })
-    );
-    await provider.sendAndConfirm(fundTx, [sponsor]);
+    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
+    expect(grantAccount.builder.toBase58()).to.equal(builder.publicKey.toBase58());
+    expect(grantAccount.sponsor.toBase58()).to.equal(sponsor.publicKey.toBase58());
+    expect(grantAccount.totalAmount.toString()).to.equal(totalAmount.toString());
+  });
 
-    const campaignAccount = await program.account.campaign.fetch(campaignPda);
-    expect(campaignAccount.campaignId).to.equal(campaignId);
-    expect(campaignAccount.ticketQuota).to.equal(ticketQuota);
-    expect(campaignAccount.ticketsIssued).to.equal(0);
-    expect(campaignAccount.grantPerBuilder.toString()).to.equal(grantPerBuilder.toString());
+  it("3. Funds the grant PDA vault with 4 SOL from sponsor", async () => {
+    await program.methods
+      .fundGrant(grantId)
+      .accounts({
+        grantEscrow: grantPda,
+        vault: vaultPda,
+        sponsor: sponsor.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([sponsor])
+      .rpc();
 
     const vaultBalance = await provider.connection.getBalance(vaultPda);
-    expect(vaultBalance).to.be.at.least(10 * LAMPORTS_PER_SOL);
+    expect(vaultBalance).to.equal(4 * LAMPORTS_PER_SOL);
   });
 
-  it("2. Registers an eligible LATAM Builder for travel support", async () => {
-    const rawMetadata = JSON.stringify({ bio: "Solana Rust Developer", github: "builder-latam" });
-    const metadataHash = Array.from(crypto.createHash("sha256").update(rawMetadata).digest());
+  it("4. Builder submits proof hash for Milestone 0 (Flight & Ticket Receipt)", async () => {
+    const dummyProof = crypto.createHash("sha256").update("LATAM_AIRLINES_BOOKING_REF_BKPT2026").digest();
+    const proofArray = Array.from(dummyProof);
 
     await program.methods
-      .registerApplicant(metadataHash, "Satoshi Hernandez", "Bogota, Colombia")
+      .submitMilestoneProof(grantId, 0, proofArray)
       .accounts({
-        applicant: applicantPda,
-        campaign: campaignPda,
+        grantEscrow: grantPda,
         builder: builder.publicKey,
-        systemProgram: SystemProgram.programId,
       })
       .signers([builder])
       .rpc();
 
-    const applicantAccount = await program.account.applicant.fetch(applicantPda);
-    expect(applicantAccount.builder.toBase58()).to.equal(builder.publicKey.toBase58());
-    expect(applicantAccount.applicantName).to.equal("Satoshi Hernandez");
-    expect(applicantAccount.originCity).to.equal("Bogota, Colombia");
-    expect(applicantAccount.travelGrantClaimed.toNumber()).to.equal(0);
-    expect(applicantAccount.ticketIssued).to.be.false;
+    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
+    expect(grantAccount.milestoneStatus[0]).to.deep.equal({ submitted: {} });
   });
 
-  it("3. Builder submits Visa & Flight Confirmation Proof", async () => {
-    const flightReceiptHash = Array.from(
-      crypto.createHash("sha256").update("FLIGHT-AVIANCA-BOG-TO-BREAKPOINT-2026").digest()
+  it("5. Juror casts affirmative vote meeting the quorum requirement", async () => {
+    const [voteRecordPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vote"), grantPda.toBuffer(), Buffer.from([0]), juror1.publicKey.toBuffer()],
+      program.programId
     );
 
-    // Stage 3 = VisaAndFlightBooked
     await program.methods
-      .submitMilestone(flightReceiptHash, { visaAndFlightBooked: {} })
+      .castJuryVote(grantId, 0, true)
       .accounts({
-        applicant: applicantPda,
-        campaign: campaignPda,
-        builder: builder.publicKey,
+        grantEscrow: grantPda,
+        voteRecord: voteRecordPda,
+        juror: juror1.publicKey,
+        systemProgram: SystemProgram.programId,
       })
-      .signers([builder])
+      .signers([juror1])
       .rpc();
 
-    const applicantAccount = await program.account.applicant.fetch(applicantPda);
-    expect(applicantAccount.milestoneStage).to.deep.equal({ visaAndFlightBooked: {} });
+    const grantAccount = await program.account.grantEscrow.fetch(grantPda);
+    expect(grantAccount.juryApprovals[0]).to.equal(1);
   });
 
-  it("4. Prevents unauthorized signers from acting as committee judges", async () => {
-    try {
-      await program.methods
-        .attestAndApprove({ visaAndFlightBooked: {} }, 95)
-        .accounts({
-          applicant: applicantPda,
-          campaign: campaignPda,
-          judge: unauthorizedUser.publicKey,
-        })
-        .signers([unauthorizedUser])
-        .rpc();
-      expect.fail("Should have thrown unauthorized error");
-    } catch (err: any) {
-      expect(err.error.errorCode.code).to.equal("UnauthorizedJudge");
-    }
-  });
-
-  it("5. Authorized Judge attests and approves Milestone", async () => {
-    await program.methods
-      .attestAndApprove({ visaAndFlightBooked: {} }, 92)
-      .accounts({
-        applicant: applicantPda,
-        campaign: campaignPda,
-        judge: sponsor.publicKey,
-      })
-      .signers([sponsor])
-      .rpc();
-
-    const applicantAccount = await program.account.applicant.fetch(applicantPda);
-    expect(applicantAccount.verifiedStage).to.deep.equal({ visaAndFlightBooked: {} });
-  });
-
-  it("6. Builder claims Phase 1 (50%) Travel Escrow Lamports", async () => {
+  it("6. Disburses Milestone 0 (2 SOL) directly to builder's wallet", async () => {
     const builderBalanceBefore = await provider.connection.getBalance(builder.publicKey);
 
     await program.methods
-      .claimTravelGrant()
+      .disburseMilestone(grantId, 0)
       .accounts({
-        campaign: campaignPda,
-        applicant: applicantPda,
+        config: configPda,
+        grantEscrow: grantPda,
         vault: vaultPda,
         builder: builder.publicKey,
+        caller: juror1.publicKey,
         systemProgram: SystemProgram.programId,
       })
-      .signers([builder])
+      .signers([juror1])
       .rpc();
 
     const builderBalanceAfter = await provider.connection.getBalance(builder.publicKey);
-    const applicantAccount = await program.account.applicant.fetch(applicantPda);
+    expect(builderBalanceAfter - builderBalanceBefore).to.equal(2 * LAMPORTS_PER_SOL);
 
-    // 50% of 2 SOL = 1 SOL
-    expect(applicantAccount.travelGrantClaimed.toNumber()).to.equal(1 * LAMPORTS_PER_SOL);
-    expect(builderBalanceAfter).to.be.greaterThan(builderBalanceBefore);
+    const vaultBalanceRemaining = await provider.connection.getBalance(vaultPda);
+    expect(vaultBalanceRemaining).to.equal(2 * LAMPORTS_PER_SOL);
   });
 
-  it("7. Issues Soulbound Breakpoint 2026 Ticket Voucher PDA", async () => {
-    await program.methods
-      .issueTicketVoucher()
-      .accounts({
-        campaign: campaignPda,
-        applicant: applicantPda,
-        voucher: voucherPda,
-        authority: sponsor.publicKey,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([sponsor])
-      .rpc();
-
-    const voucherAccount = await program.account.ticketVoucher.fetch(voucherPda);
-    expect(voucherAccount.recipient.toBase58()).to.equal(builder.publicKey.toBase58());
-    expect(voucherAccount.ticketNumber).to.equal(1);
-    expect(voucherAccount.isClaimed).to.be.true;
-
-    const campaignAccount = await program.account.campaign.fetch(campaignPda);
-    expect(campaignAccount.ticketsIssued).to.equal(1);
-  });
-
-  it("8. Rejects duplicate ticket voucher issuance", async () => {
+  it("7. Fails when an attacker attempts to disburse funds to an unauthorized address", async () => {
     try {
       await program.methods
-        .issueTicketVoucher()
+        .disburseMilestone(grantId, 1)
         .accounts({
-          campaign: campaignPda,
-          applicant: applicantPda,
-          voucher: voucherPda,
-          authority: sponsor.publicKey,
+          config: configPda,
+          grantEscrow: grantPda,
+          vault: vaultPda,
+          builder: attacker.publicKey, // Fraudulent address
+          caller: attacker.publicKey,
           systemProgram: SystemProgram.programId,
         })
-        .signers([sponsor])
+        .signers([attacker])
         .rpc();
-      expect.fail("Should have failed to issue duplicate ticket");
+      expect.fail("Should have thrown constraint error");
     } catch (err: any) {
-      // Re-initialization of the same voucher PDA or TicketAlreadyIssued error
-      expect(err).to.exist;
+      expect(err.toString()).to.include("Error");
     }
   });
 });

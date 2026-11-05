@@ -1,8 +1,7 @@
 {
-  "status": "healthy",
-  "service": "rumbo-escrow-daemon",
-  "season": 2026,
-  "connected_rpc": "https://api.devnet.solana.com",
-  "active_subscriptions": 1,
-  "uptime_seconds": 84120
+  "status": "HEALTHY",
+  "programId": "Rumb02026Breakpoint111111111111111111111111",
+  "cluster": "devnet",
+  "uptimeSeconds": 86400,
+  "eventsProcessed": 142
 }

@@ -1,17 +1,17 @@
-# 1. Clone repository & install dependencies
-git clone https://github.com/solana-rumbo/rumbo-breakpoint-protocol.git
-cd rumbo-breakpoint-protocol
-npm install
+# 1. Install dependencies & Anchor CLI
+npm install -g @coral-xyz/anchor-cli
+yarn install
 
-# 2. Build Anchor Smart Contracts
+# 2. Build smart contract binary
 anchor build
 
 # 3. Synchronize program keys
-solana address -k target/deploy/rumbo_protocol-keypair.json
 anchor keys sync
 
-# 4. Run full deterministic test suite with local validator
-anchor test
-
-# 5. Deploy to Devnet
+# 4. Deploy to Solana Devnet / Mainnet
+solana config set --url https://api.devnet.solana.com
+solana airdrop 2
 anchor deploy --provider.cluster devnet
+
+# 5. Run end-to-end automated verification suite
+anchor test
